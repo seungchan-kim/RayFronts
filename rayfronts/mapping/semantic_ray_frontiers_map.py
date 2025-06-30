@@ -509,7 +509,7 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
       if self.infer_direction:
         self.compute_inferred_directions()
 
-    return update_info
+    return update_info, self.global_vox_xyz, self.global_vox_rgb, self.global_vox_feat, self.global_rays_orig_angles, self.global_rays_feat
 
   def cast_semantic_rays(self) -> None:
     """Cast semantic rays accumulated in the temporary buffers onto frontiers.
