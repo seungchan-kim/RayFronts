@@ -39,9 +39,9 @@ try:
   from rclpy.qos import QoSProfile, ReliabilityPolicy
   import message_filters
   from sensor_msgs.msg import Image, CameraInfo, PointCloud
+  from nav_msgs.msg import Odometry
   from geometry_msgs.msg import PoseStamped
   from stereo_msgs.msg import DisparityImage
-  from nav_msgs.msg import Odometry
   from rayfronts.ros_utils import image_to_numpy, pose_to_numpy
 except ModuleNotFoundError:
   logger.warning("ROS2 modules not found !")
@@ -67,7 +67,7 @@ class Ros2Subscriber(PosedRgbdDataset):
                rgb_resolution=None,
                depth_resolution=None,
                disparity_topic = None,
-               depth_topic = None,
+               depth_topic=None,
                confidence_topic = None,
                point_cloud_topic = None,
                intrinsics_topic = None,
@@ -77,7 +77,7 @@ class Ros2Subscriber(PosedRgbdDataset):
                interp_mode="bilinear"):
     """
 
-    There can be three sources of depth:
+    There can be two sources of depth:
     1- Disparity topic
     2- Depth topic
     3- Point cloud topic (will be projected using pose and intrinsics)
@@ -91,8 +91,7 @@ class Ros2Subscriber(PosedRgbdDataset):
       pose_topic: Topic containing poses of type geometry_msgs/msg/PoseStamped
       disparity_topic: Topic containing disparity images of type
         stereo_msgs/DisparityImage.
-      depth_topic: Topic containing depth images of type sensor_msgs/msg/Image
-        with 32FC1 encoding in metric scale.
+      depth_topic: TOpic containing depth images of type sensor_msgs/msg/Image with 32FC1 encoding in metric scale.
       confidence_topic: (Optional) Topic containing confidence in depth values.
         Message type: sensor_msgs/msg/Image.
       point_cloud_topic: Topic containing point cloud of type
@@ -140,9 +139,9 @@ class Ros2Subscriber(PosedRgbdDataset):
     # Setup ros node
     msg_str_to_type = OrderedDict(
       rgb = Image,
-      pose = PoseStamped,
+      pose = Odometry,
       disp = DisparityImage,
-      depth = Image,
+      depth= Image,
       pc = PointCloud,
       conf = Image,
     )
@@ -242,18 +241,28 @@ class Ros2Subscriber(PosedRgbdDataset):
       msgs = dict(zip(self._subs.keys(), msgs))
 
       # Parse RGB
-      bgra_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
-      bgr_img = bgra_img[..., :3]
-      rgb_img = torch.tensor(bgr_img[..., (2,1,0)],
-                             dtype=torch.float).permute(2, 0, 1)
+      # bgra_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
+      # bgr_img = bgra_img[..., :3]
+      # rgb_img = torch.tensor(bgr_img[..., (2,1,0)],
+      #                        dtype=torch.float).permute(2, 0, 1)
+      rgba_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
+      rgb_img = rgba_img[..., :3]
+      rgb_img = torch.tensor(rgb_img, dtype=torch.float).permute(2,0,1)
 
       # Parse Pose
       src_pose_4x4 = torch.tensor(
         pose_to_numpy(msgs["pose"].pose), dtype=torch.float)
+      if True:
+        pitch = 0.1745
+        R_pitch = np.array([[np.cos(pitch), 0, np.sin(pitch)],[0,1,0],[-np.sin(pitch),0,np.cos(pitch)]])
+        T = np.eye(4,dtype=np.float32)
+        T[:3,:3] = R_pitch
+        T_base_to_cam = T
+        src_pose_4x4 = src_pose_4x4 @ T_base_to_cam
       rdf_pose_4x4 = g3d.transform_pose_4x4(
         src_pose_4x4, self.src2rdf_transform)
 
-      if 'depth' in msgs.keys():
+      if "depth" in msgs.keys():
         depth_img = image_to_numpy(msgs["depth"])
         depth_img = torch.tensor(depth_img, dtype=torch.float).unsqueeze(0)
       elif "disp" in msgs.keys():
@@ -299,7 +308,7 @@ class Ros2Subscriber(PosedRgbdDataset):
         depth_img[:, v[mask], u[mask]] = pc_depth[mask]
         depth_img[depth_img < 0] = -torch.infs
       else:
-        raise ValueError("Expected at least a depth or a disparity or point cloud topic")
+        raise ValueError("Expected at least a disparity or point cloud topic")
 
       # Parse confidence map if it exists
       conf_img = None
