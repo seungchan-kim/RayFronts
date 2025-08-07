@@ -29,6 +29,8 @@ import hydra
 import struct
 
 from rayfronts import datasets, visualizers, image_encoders, mapping, utils
+from rayfronts.behavior_manager import BehaviorManager
+from rayfronts.mode_text_visualizer import ModeTextVisualizer
 
 import rclpy
 from rclpy.node import Node
@@ -44,7 +46,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 from rayfronts import geometry3d as g3d
 from rayfronts.utils import compute_cos_sim
-from sklearn.cluster import DBSCAN
+
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +79,24 @@ class MappingServer(Node):
     self.cfg = cfg
     self.dataset: datasets.PosedRgbdDataset = \
       hydra.utils.instantiate(cfg.dataset)
+    
+    self.behavior_manager = BehaviorManager(get_clock=self.get_clock)
 
     self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
     #self.pc2_publisher = self.create_publisher(PointCloud2, '/colored_pointcloud', 10)
     #self.rays_publisher = self.create_publisher(MarkerArray, '/rays', 10)
-    self.filtered_rays_publisher = self.create_publisher(MarkerArray, 'filtered_rays', 10)
+    self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
+
+    self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
 
     self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
+    self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher=self.mode_text_publisher)
 
-    self.viewpoint_pub = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
+    self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
+
+    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
 
     self.waypoint_locked = False
-
     self.target_waypoint = None
     self.target_waypoint2 = None
 
@@ -338,432 +346,20 @@ class MappingServer(Node):
       r = self.mapper.process_posed_rgbd(rgb_img, depth_img, pose_4x4, **kwargs)
       map_t1 = time.time()
 
-      #IF query is none: frontier-based
-      if self._queries_labels is None:
-        self.behavior_mode = 'Frontier-based'
-      elif self._queries_labels['text'] is None:
-        self.behavior_mode = 'Frontier-based'
-      elif self._target_object is None:
-        self.behavior_mode = 'Frontier-based'
-      elif self._queries_labels['text'] is not None and self._target_object is not None:
+      #Behavior Manager selects behavior mode
+      self.behavior_manager.mode_select(queries_labels=self._queries_labels,
+                                        target_object=self._target_object,  
+                                        queries_feats=self._queries_feats, 
+                                        mapper=self.mapper)
+      self.behavior_mode = self.behavior_manager.behavior_mode
 
-        ray_feat = self.mapper.global_rays_feat
-        ray_orig_angles = self.mapper.global_rays_orig_angles
-        
-        label_index = self._queries_labels['text'].index(self._target_object)
+      #RVIZ visualizer for /mode_text
+      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
 
-        if ray_feat is not None and ray_orig_angles is not None and ray_feat.shape[0] > 0:
-          ray_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(self.mapper.global_rays_feat.unsqueeze(-1).unsqueeze(-1))
-          if ray_lang_aligned.ndim == 4:
-            ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
-          if ray_lang_aligned.ndim == 2:
-            ray_lang_aligned = ray_lang_aligned
-          if ray_lang_aligned.ndim == 1:
-            ray_lang_aligned = ray_lang_aligned.unsqueeze(0)
+      point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 
-          if self._queries_feats is not None:
-            ray_scores = compute_cos_sim(self._queries_feats['text'], ray_lang_aligned, softmax=True)
-            print("ray_scores", torch.round(ray_scores*1000)/1000)
-            threshold = 0.95
-            indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
-            print("indices", indices)
-
-            if indices.numel() > 0:
-              self.behavior_mode = 'Ray-based'
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict) 
       
-      mode_text_marker = Marker()
-      mode_text_marker.header.frame_id = "map"
-      mode_text_marker.header.stamp = self.get_clock().now().to_msg()
-      mode_text_marker.ns = "mode_text"
-      mode_text_marker.id = 0
-      mode_text_marker.type = Marker.TEXT_VIEW_FACING
-      mode_text_marker.action = Marker.ADD
-      mode_text_marker.pose.position.x = cur_pose_np[0]
-      mode_text_marker.pose.position.y = cur_pose_np[1]
-      mode_text_marker.pose.position.z = cur_pose_np[2] + 10
-      mode_text_marker.pose.orientation.w = 1.0
-      mode_text_marker.scale.z = 2.0 # Text height in meters
-      mode_text_marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
-
-      if self._target_object is None:
-        mode_text_marker.text = "No Target Object" + "\nExploration Mode: Frontier-based"
-        #clear the filtered rays (visualization)
-        self.clear_filtered_rays()
-      else:
-        mode_text_marker.text = "Target Object: " + self._target_object
-        if self.behavior_mode == 'Frontier-based':
-          mode_text_marker.text += "\nDidn't find any rays"
-          #clear the filtered rays (visualization)
-          self.clear_filtered_rays()
-          mode_text_marker.text += "\nExploration Mode: Frontier-based"
-        elif self.behavior_mode == 'Ray-based':
-          mode_text_marker.text += "\nDetected Rays"
-          mode_text_marker.text += "\nExploration Mode: Ray-based"
-      mode_text_marker.lifetime.sec = 0
-
-      self.mode_text_publisher.publish(mode_text_marker)
-
-      if self.behavior_mode == 'Frontier-based':
-        if self.mapper.frontiers is not None:
-          transformed_frontiers = torch.stack([
-            self.mapper.frontiers[:,2],
-            -self.mapper.frontiers[:,0],
-            -self.mapper.frontiers[:,1]
-          ],dim=1)
-
-          #filter out frontier points that are <= 1.5m
-          transformed_frontiers = transformed_frontiers[transformed_frontiers[:, 2] > 1.5]
-
-          ######fixed-grid-based chunking#######
-          #chunk_size = 10
-          #chunk_indices = (transformed_frontiers / chunk_size).floor().to(torch.int32)
-          #unique_chunks, inverse_indices = torch.unique(chunk_indices, dim=0, return_inverse=True)
-          #viewpoints = []
-          #for i in range(len(unique_chunks)):
-          #  mask = (inverse_indices == i)
-          #  cluster_points = transformed_frontiers[mask]
-          #  centroid = cluster_points.mean(dim=0)
-          #  if centroid[2] > 2.0:
-          #    viewpoints.append(centroid)
-          #viewpoints = torch.stack(viewpoints)
-          ###########################
-
-          #####DBSCAN clustering of frontiers#####
-          frontiers_cpu = transformed_frontiers.detach().cpu().numpy()
-          clustering = DBSCAN(eps=2.7, min_samples=3).fit(frontiers_cpu)
-          labels = clustering.labels_
-          unique_labels = [l for l in set(labels) if l != -1]
-          viewpoints = []
-          for l in unique_labels:
-            cluster_pts = frontiers_cpu[labels==l]
-            centroid = cluster_pts.mean(axis=0)
-            centroid_torch = torch.from_numpy(centroid)
-            centroid_torch = centroid_torch.to(transformed_frontiers.device, dtype=transformed_frontiers.dtype)
-            if centroid_torch[2] > 2.0:
-              viewpoints.append(centroid_torch)
-          viewpoints = torch.stack(viewpoints)
-          ###########################
-
-          cent_msg = self.create_pointcloud2_msg(viewpoints)
-          self.viewpoint_pub.publish(cent_msg)
-
-
-          robot_pos_torch = torch.tensor(cur_pose_np, dtype=viewpoints.dtype, device=viewpoints.device)
-          distances = torch.norm(viewpoints - robot_pos_torch, dim=1) #distances
-          #fill here
-          if self.target_waypoint is not None:
-            target_waypoint_tensor = torch.tensor(self.target_waypoint, device=viewpoints.device, dtype=viewpoints.dtype)
-            cur_motion_vec = target_waypoint_tensor - robot_pos_torch
-            cur_motion_vec = cur_motion_vec / (torch.norm(cur_motion_vec) + 1e-6)
-            candidate_vecs = viewpoints - robot_pos_torch
-            candidate_vecs = candidate_vecs / (torch.norm(candidate_vecs, dim=1, keepdim=True) + 1e-6)
-            cos_sim = torch.matmul(candidate_vecs, cur_motion_vec)
-            momentum_weight = 5
-            scores = distances + momentum_weight * (1.0 - cos_sim)
-          else:
-            scores = distances
-          best_idx = torch.argsort(scores)[0]
-          best_cent = viewpoints[best_idx]
-
-
-          path = Path()
-          path.header.stamp = self.get_clock().now().to_msg()
-          path.header.frame_id = 'map'
-
-          if not self.waypoint_locked:          
-            best_cent_np = best_cent.cpu().numpy()
-            self.target_waypoint = best_cent_np
-            dir = self.target_waypoint - cur_pose_np
-            dir = dir / np.linalg.norm(self.target_waypoint - cur_pose_np)
-            self.target_waypoint2 = self.target_waypoint + 2.0*dir
-            print("Frontier Target Waypoint is Updated.")
-            self.waypoint_locked = True
-          
-          # mid_pose_np = (cur_pose_np + self.target_waypoint) / 2.0
-          
-          # mid_pose = PoseStamped()
-          # mid_pose.header.stamp = self.get_clock().now().to_msg()
-          # mid_pose.header.frame_id = 'map'
-          # mid_pose.pose.position.x = mid_pose_np[0]
-          # mid_pose.pose.position.y = mid_pose_np[1]
-          # mid_pose.pose.position.z = mid_pose_np[2]
-          # mid_pose.pose.orientation.w = 1.0
-          # path.poses.append(mid_pose)
-          
-          target_pose = PoseStamped()
-          target_pose.header.stamp = self.get_clock().now().to_msg()
-          target_pose.header.frame_id = 'map'        
-          target_pose.pose.position.x = float(self.target_waypoint[0])
-          target_pose.pose.position.y = float(self.target_waypoint[1])
-          target_pose.pose.position.z = float(self.target_waypoint[2])
-          target_pose.pose.orientation.w = 1.0
-          path.poses.append(target_pose)
-
-          target_pose2 = PoseStamped()
-          target_pose2.header.stamp = self.get_clock().now().to_msg()
-          target_pose2.header.frame_id = 'map'        
-          target_pose2.pose.position.x = float(self.target_waypoint2[0])
-          target_pose2.pose.position.y = float(self.target_waypoint2[1])
-          target_pose2.pose.position.z = float(self.target_waypoint2[2])
-          target_pose2.pose.orientation.w = 1.0
-          path.poses.append(target_pose2)
-
-          self.path_publisher.publish(path)
-
-          if np.linalg.norm(cur_pose_np - self.target_waypoint) < 5.0:
-            print("Robot went to the waypoint close to 5m, and free the lock.")
-            self.waypoint_locked = False
-            
-
-      elif self.behavior_mode == 'Ray-based':
-        ray_feat = self.mapper.global_rays_feat
-        ray_orig_angles = self.mapper.global_rays_orig_angles
-        
-        label_index = self._queries_labels['text'].index(self._target_object)
-
-        if ray_feat is not None and ray_orig_angles is not None and ray_feat.shape[0] > 0:
-          #print("ray_feat", ray_feat.shape)
-          ray_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(self.mapper.global_rays_feat.unsqueeze(-1).unsqueeze(-1))
-          if ray_lang_aligned.ndim == 4:
-            ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
-          if ray_lang_aligned.ndim == 2:
-            ray_lang_aligned = ray_lang_aligned
-          if ray_lang_aligned.ndim == 1:
-            ray_lang_aligned = ray_lang_aligned.unsqueeze(0)
-          #print("ray_lang_aligned", ray_lang_aligned.shape)
-          
-          ray_orig = ray_orig_angles[:,:3]
-          #print("ray_orig", ray_orig)
-          ray_angles = torch.deg2rad(ray_orig_angles[:,3:])
-          #print("ray_angles", ray_angles)
-          ray_dir = torch.stack(g3d.spherical_to_cartesian(1,ray_angles[:,0],ray_angles[:,1]),dim=-1)
-          #print("ray_dir", ray_dir)
-
-
-          if self._queries_feats is not None:
-            #print("self._queries_labels", self._queries_labels)
-            #print("self._queries_feats", self._queries_feats)
-            ray_scores = compute_cos_sim(self._queries_feats['text'], ray_lang_aligned, softmax=True)
-            #print("ray_lang_aligned", ray_lang_aligned.shape)
-            #print("ray_scores", ray_scores.shape)
-            print("ray_scores", torch.round(ray_scores*1000)/1000)
-            #_, indices = torch.topk(ray_scores, k=1, dim=0)
-            #indices = torch.nonzero(ray_scores>0.05, as_tuple=True)[0]
-            threshold = 0.95
-            indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
-            print("indices", indices)
-
-            if indices.numel() > 0:
-              filtered_origins = ray_orig[indices]
-              filtered_directions = ray_dir[indices]
-              fo = filtered_origins
-              fd = filtered_directions
-              orig_world = torch.stack([fo[:,2],-fo[:,0],-fo[:,1]],dim=1)
-              dir_world = torch.stack([fd[:,2],-fd[:,0],-fd[:,1]],dim=1)
-              xy_dirs = dir_world[:,:2]
-
-              xy_dirs_np = xy_dirs.cpu().numpy()
-
-              xy_dirs_np_normed = xy_dirs_np / np.linalg.norm(xy_dirs_np, axis=1, keepdims=True)
-              angle_groups = []
-
-              angle_threshold_cos = np.cos(np.deg2rad(45))
-
-              for i, xy_dir in enumerate(xy_dirs_np_normed):
-                assigned = False
-                for group in angle_groups:
-                  dot = np.dot(xy_dir, group['centroid'])
-                  if dot >= angle_threshold_cos:
-                    group['indices'].append(i)
-                    group['rays'].append(xy_dir)
-                    group['centroid'] = np.mean(group['rays'],axis=0)
-                    group['centroid'] /= np.linalg.norm(group['centroid'])
-                    assigned = True
-                    break
-                if not assigned:
-                  angle_groups.append({
-                    'centroid': xy_dir, 
-                    'rays':[xy_dir],
-                    'indices':[i]
-                    })
-              
-              MIN_RAYS_PER_GROUP = 2
-              angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
-
-              #mean_origin = torch.mean(filtered_origins, dim=0)
-              #mean_direction = torch.mean(filtered_directions, dim=0)
-              
-              group_averages = []
-              for group in angle_groups:
-                group_idx = group['indices']
-                group_origins = orig_world[group_idx]
-                group_directions = dir_world[group_idx]
-
-                avg_origin = group_origins.mean(dim=0)
-                avg_direction = group_directions.mean(dim=0)
-                avg_direction = avg_direction / avg_direction.norm()
-
-                #group_size = len(group_idx)
-
-                group_averages.append((avg_origin, avg_direction))
-              
-              #sort the group_averages by the distance from the current_pose to the origin
-              group_averages = sorted(group_averages, key=lambda pair: np.linalg.norm(pair[0].cpu().numpy() - cur_pose_np))
-              #group_averages = sorted(group_averages, key=lambda x: x[2], reverse=True)
-
-
-              #origin_np = mean_origin.cpu().numpy()
-              #direction_np = mean_direction.cpu().numpy()
-
-              #origin = np.array([origin_np[2],-origin_np[0],-origin_np[1]])
-              #direction = np.array([direction_np[2], -direction_np[0], -direction_np[1]])
-
-              magnitude = 2.0
-
-              path = Path()
-              path.header.stamp = self.get_clock().now().to_msg()
-              path.header.frame_id = "map"
-              
-              #best ray-groups only
-              # best_avg_origin, best_avg_direction, _ = group_averages[0]
-              # origin_np = best_avg_origin.cpu().numpy()
-              # direction_np = best_avg_direction.cpu().numpy()
-              # direction_np = direction_np / np.linalg.norm(direction_np)
-              # mid_pose_np = (cur_pose_np + origin_np) / 2.0
-              # mid_pose = PoseStamped()
-              # mid_pose.header.stamp = self.get_clock().now().to_msg()
-              # mid_pose.header.frame_id = 'map'
-              # mid_pose.pose.position.x = float(mid_pose_np[0])
-              # mid_pose.pose.position.y = float(mid_pose_np[1])
-              # mid_pose.pose.position.z = float(mid_pose_np[2])
-              # mid_pose.pose.orientation.w = 1.0
-              # path.poses.append(mid_pose)
-
-              # target = origin_np + direction_np * magnitude
-              # for factor in [0.0, 1.0]:
-              #     pose = PoseStamped()
-              #     pose.header.stamp = self.get_clock().now().to_msg()
-              #     pose.header.frame_id = "map"
-              #     pose.pose.position.x = float(origin_np[0]) * (1 - factor) + float(target[0]) * factor
-              #     pose.pose.position.y = float(origin_np[1]) * (1 - factor) + float(target[1]) * factor
-              #     pose.pose.position.z = float(origin_np[2]) * (1 - factor) + float(target[2]) * factor
-              #     pose.pose.orientation.w = 1.0
-              #     path.poses.append(pose)
-
-
-              # TODO: this is using all rays 
-              prev_target = cur_pose_np
-              for ii, (avg_origin, avg_direction) in enumerate(group_averages):
-                origin_np = avg_origin.cpu().numpy()
-                direction_np = avg_direction.cpu().numpy()
-
-                origin = origin_np
-                direction = direction_np / np.linalg.norm(direction_np)
-
-                #mid-point for smoothing entry
-                mid_pose_np = (prev_target + origin) / 2.0
-                mid_pose = PoseStamped()
-                mid_pose.header.stamp = self.get_clock().now().to_msg()
-                mid_pose.header.frame_id = 'map'
-                mid_pose.pose.position.x = float(mid_pose_np[0])
-                mid_pose.pose.position.y = float(mid_pose_np[1])
-                mid_pose.pose.position.z = float(mid_pose_np[2])
-                mid_pose.pose.orientation.w = 1.0
-                path.poses.append(mid_pose)
-
-                target = origin + direction * magnitude
-                for factor in [0.0, 1.0]:
-                  pose = PoseStamped()
-                  pose.header.stamp = self.get_clock().now().to_msg()
-                  pose.header.frame_id = "map"
-                  pose.pose.position.x = float(origin[0]) * (1 - factor) + float(target[0]) * factor
-                  pose.pose.position.y = float(origin[1]) * (1 - factor) + float(target[1]) * factor
-                  pose.pose.position.z = float(origin[2]) * (1 - factor) + float(target[2]) * factor
-                  pose.pose.orientation.w = 1.0
-                  path.poses.append(pose)
-                
-                prev_target = target
-
-              # unit_dir = direction / np.linalg.norm(direction)
-              # target = origin + unit_dir * magnitude
-              self.path_publisher.publish(path)
-
-              rviz_filtered_dir = True ##visualize filtered rays on RVIZ
-              if rviz_filtered_dir:
-                self.clear_filtered_rays()
-                arrow_length = 2
-                filtered_marker_array = MarkerArray()
-                #assert filtered_origins.shape[0] == filtered_directions.shape[0]
-                colors = [(1.0, 0.0, 0.0),  # red
-                          (0.0, 1.0, 0.0),  # green
-                          (0.0, 0.0, 1.0),  # blue
-                          (1.0, 1.0, 0.0),  # yellow
-                          (0.0, 1.0, 1.0),  # cyan
-                          (1.0, 0.0, 1.0),  # magenta
-                          (0.5, 0.5, 0.5),  # gray
-                          (1.0, 0.5, 0.0),  # orange
-                          (0.5, 0.0, 1.0),  # purple
-                          (0.0, 0.5, 0.5)   # teal
-                          ]
-                num_groups = len(angle_groups)
-                
-                j=0
-                for i, group in enumerate(angle_groups):
-                  idxes = group['indices']
-                  rr,gg,bb = colors[i % len(colors)]
-                  for idx in idxes:
-                    dir0 = dir_world[idx].cpu().numpy()
-                    p0 = orig_world[idx].cpu().numpy()
-                    p1 = p0 + arrow_length*dir0
-                    arrow = Marker()
-                    arrow.header.frame_id = "map"
-                    arrow.header.frame_id = "map"
-                    arrow.header.stamp = self.get_clock().now().to_msg()
-                    arrow.ns = "arrows"
-                    arrow.id = j
-                    arrow.type = Marker.ARROW
-                    arrow.action = Marker.ADD
-                    arrow.points = [Point(x=float(p0[0]), y=float(p0[1]), z=float(p0[2])), Point(x=float(p1[0]), y=float(p1[1]), z=float(p1[2]))]
-                    arrow.scale.x = 0.6 #shaft diameter
-                    arrow.scale.y = 1.2 #head diameter
-                    arrow.scale.z = 0.75 #head length
-                    arrow.color.r = rr
-                    arrow.color.g = gg
-                    arrow.color.b = bb
-                    arrow.color.a = 0.5
-                    filtered_marker_array.markers.append(arrow)
-                    j += 1
-                self.prev_filtered_marker_ids = j
-                self.filtered_rays_publisher.publish(filtered_marker_array)
-
-
-                # for i in range(filtered_directions.shape[0]):
-                #   p0_ = filtered_origins[i].cpu().numpy()
-                #   p0 = np.array([p0_[2],-p0_[0],-p0_[1]])
-                #   dir0_ = filtered_directions[i].cpu().numpy()
-                #   dir0 = np.array([dir0_[2], -dir0_[0], -dir0_[1]])
-                #   p1 = p0 + arrow_length*dir0
-                #   arrow = Marker()
-                #   arrow.header.frame_id = "map"
-                #   arrow.header.stamp = self.get_clock().now().to_msg()
-                #   arrow.ns = "arrows"
-                #   arrow.id = i
-                #   arrow.type = Marker.ARROW
-                #   arrow.action = Marker.ADD
-                #   arrow.points = [Point(x=float(p0[0]), y=float(p0[1]), z=float(p0[2])), Point(x=float(p1[0]), y=float(p1[1]), z=float(p1[2]))]
-                #   arrow.scale.x = 0.6 #shaft diameter
-                #   arrow.scale.y = 1.2 #head diameter
-                #   arrow.scale.z = 0.75 #head length
-                #   arrow.color.r = 1.0
-                #   arrow.color.g = 0.2
-                #   arrow.color.b = 0.6
-                #   arrow.color.a = 0.5
-                #   filtered_marker_array.markers.append(arrow)
-                # self.prev_filtered_marker_ids = filtered_directions.shape[0]
-                # self.filtered_rays_publisher.publish(filtered_marker_array)
-              
-
-
       if self.vis is not None:
         if i % self.cfg.vis.input_period == 0:
           self.mapper.vis_update(**r)
@@ -864,6 +460,8 @@ class MappingServer(Node):
     else:
       self._target_object = data_cleaned
     print("self._target_object", self._target_object)
+    if self._target_object is not None and self._target_object not in self._queries_labels['text']:
+      self.add_queries(self._target_object)
 
   def clear_filtered_rays(self):
     if self.prev_filtered_marker_ids > 0:
