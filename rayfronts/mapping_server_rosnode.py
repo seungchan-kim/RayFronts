@@ -351,6 +351,9 @@ class MappingServer(Node):
                                         target_object=self._target_object,  
                                         queries_feats=self._queries_feats, 
                                         mapper=self.mapper)
+      
+      if self.behavior_mode != self.behavior_manager.behavior_mode:
+        self.mode_switch_trigger()
       self.behavior_mode = self.behavior_manager.behavior_mode
 
       #RVIZ visualizer for /mode_text
@@ -462,6 +465,11 @@ class MappingServer(Node):
     print("self._target_object", self._target_object)
     if self._target_object is not None and self._target_object not in self._queries_labels['text']:
       self.add_queries(self._target_object)
+  
+  def mode_switch_trigger(self):
+    self.waypoint_locked = False
+    self.target_waypoint = None
+    self.target_waypoint2 = None
 
   def clear_filtered_rays(self):
     if self.prev_filtered_marker_ids > 0:

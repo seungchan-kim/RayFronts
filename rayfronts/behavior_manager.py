@@ -32,7 +32,6 @@ class BehaviorManager:
             wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Voxel-based':
-            #self.voxel_behavior.execute()
             wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Ray-based':

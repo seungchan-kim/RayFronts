@@ -6,6 +6,7 @@ import time
 import scipy.ndimage
 from rayfronts.utils import compute_cos_sim
 from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
 
 class VoxelBehavior:
     def __init__(self, get_clock):
@@ -13,6 +14,7 @@ class VoxelBehavior:
         self.name = 'Voxel-based'
         self.target_voxel_clusters = {}
         self.target_object = None
+        self.visited_cluster_centers = []
 
     def condition_check(self, queries_labels, target_object, queries_feats, mapper):
         if queries_labels is None:
@@ -62,46 +64,94 @@ class VoxelBehavior:
                         labeled, num_components = scipy.ndimage.label(occupancy,structure=structure)
                         ccl_ed = time.time()
                         print("time for ccl: ", ccl_ed - ccl_st, " sec")
-
                         label_ids = torch.tensor([labeled[x,y,z] for x,y,z in norm_coords])
                         norm_np = norm_coords.cpu().numpy()
-
                         vox_cluster_count = 0
-                        
                         for label_val in range(1, num_components+1):
                             idx = (label_ids == label_val).nonzero(as_tuple=True)[0]
                             if len(idx) < 30:
                                 continue
-
                             coords = norm_np[idx]
                             min_voxel = coords.min(axis=0)
                             max_voxel = coords.max(axis=0)
-
                             min_world = min_voxel * vox_size + min_coords.cpu().numpy()
                             max_world = (max_voxel+1) * vox_size + min_coords.cpu().numpy()
                             center = (min_world + max_world) / 2
                             size = max_world - min_world
-
                             cx = center[2]
                             cy = -center[0]
                             cz = -center[1]
-
                             sx = size[2]
                             sy = -size[0]
                             sz = -size[1]
-
                             self.target_voxel_clusters[target_object][vox_cluster_count] = [cx,cy,cz,sx,sy,sz]
                             vox_cluster_count += 1
                                                 
                         if vox_cluster_count > 0:
-                            return True
-                        
+                            return True                
         return False
 
     def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict):
         voxel_bbox_publisher = publisher_dict['voxel_bbox']
         self.visualize_voxel_cluster_bbox(self.target_object, voxel_bbox_publisher)
-        return waypoint_locked, point3d_dict['target1'], point3d_dict['target2']
+
+        cur_pose_np = point3d_dict['cur_pose']
+        target_waypoint1 = point3d_dict['target1']
+        target_waypoint2 = point3d_dict['target2']
+        path_publisher = publisher_dict['path']
+
+        all_clusters = self.target_voxel_clusters[self.target_object].items()
+
+        unvisited_clusters = [(idx, cluster) for idx, cluster in all_clusters 
+                              if not self.is_near_visited(np.array(cluster[:3]), self.visited_cluster_centers)]
+        sorted_voxel_clusters_by_dist = sorted(unvisited_clusters,
+                                               key=lambda item: np.linalg.norm(cur_pose_np - np.array(item[1][:3])))
+        
+        path = Path()
+        path.header.stamp = self.get_clock().now().to_msg()
+        path.header.frame_id = 'map'
+
+        for i, (idx, cluster) in enumerate(sorted_voxel_clusters_by_dist):
+            center = np.array(cluster[:3])
+            mid_pose_np = (cur_pose_np + center) / 2.0
+            dir = center - mid_pose_np
+            dir_norm = dir / np.linalg.norm(dir)
+            adjacent_np = center - dir_norm * 5.0
+            if i == 0 and not waypoint_locked:
+                target_waypoint1 = mid_pose_np
+                target_waypoint2 = adjacent_np
+                waypoint_locked = True
+            
+            final_mid_pose_np = target_waypoint1 if i == 0 else mid_pose_np
+            final_adj_pose_np = target_waypoint2 if i == 0 else adjacent_np
+            
+            mid_pose = PoseStamped()
+            mid_pose.header.stamp = self.get_clock().now().to_msg()
+            mid_pose.header.frame_id = 'map'
+            mid_pose.pose.position.x = float(final_mid_pose_np[0])
+            mid_pose.pose.position.y = float(final_mid_pose_np[1])
+            mid_pose.pose.position.z = float(final_mid_pose_np[2])
+            mid_pose.pose.orientation.w = 1.0
+            path.poses.append(mid_pose)
+
+            adj_pose = PoseStamped()
+            adj_pose.header.stamp = self.get_clock().now().to_msg()
+            adj_pose.header.frame_id = 'map'
+            adj_pose.pose.position.x = float(final_adj_pose_np[0])
+            adj_pose.pose.position.y = float(final_adj_pose_np[1])
+            adj_pose.pose.position.z = float(final_adj_pose_np[2])
+            adj_pose.pose.orientation.w = 1.0
+            path.poses.append(adj_pose)
+
+        path_publisher.publish(path)
+
+        if np.linalg.norm(cur_pose_np - target_waypoint2) < 2.0:
+            if sorted_voxel_clusters_by_dist:
+                first_cluster_center = np.array(sorted_voxel_clusters_by_dist[0][1][:3])
+                self.visited_cluster_centers.append(first_cluster_center)
+            waypoint_locked = False
+
+        return waypoint_locked, target_waypoint1, target_waypoint2
 
     def visualize_voxel_cluster_bbox(self, target_object, voxel_bbox_publisher):
         marker_array = MarkerArray()
@@ -130,3 +180,6 @@ class VoxelBehavior:
             marker.lifetime.sec = 1
             marker_array.markers.append(marker)
         voxel_bbox_publisher.publish(marker_array)
+    
+    def is_near_visited(self, center, visited_centers, threshold=10.0):
+        return any(np.linalg.norm(center - visited) < threshold for visited in visited_centers)
