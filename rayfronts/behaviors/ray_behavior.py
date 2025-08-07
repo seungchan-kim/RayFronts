@@ -37,14 +37,14 @@ class RayBehavior:
                 if ray_lang_aligned.ndim == 1:
                     ray_lang_aligned = ray_lang_aligned.unsqueeze(0)
 
-            if queries_feats is not None:
-                ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
-                threshold = 0.95
-                indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
-                if indices.numel() > 0:
-                    self.indices = indices
-                    self.ray_orig_angles = ray_orig_angles
-                    return True
+                if queries_feats is not None:
+                    ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
+                    threshold = 0.95
+                    indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
+                    if indices.numel() > 0:
+                        self.indices = indices
+                        self.ray_orig_angles = ray_orig_angles
+                        return True
 
         return False
     
@@ -52,7 +52,7 @@ class RayBehavior:
         path_publisher = publisher_dict['path']
         cur_pose_np = point3d_dict['cur_pose']
         ray_orig = self.ray_orig_angles[:,:3]
-        ray_angles = torch.deg2rad(self.ray_orig_angles[:,:3:])
+        ray_angles = torch.deg2rad(self.ray_orig_angles[:,3:])
         ray_dir = torch.stack(g3d.spherical_to_cartesian(1,ray_angles[:,0],ray_angles[:,1]),dim=-1)
 
         fo = ray_orig[self.indices]
@@ -86,6 +86,9 @@ class RayBehavior:
                     'indices':[i]
                     })
         
+        MIN_RAYS_PER_GROUP = 2
+        angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
+
         group_averages = []
         for group in angle_groups:
             group_idx = group['indices']
