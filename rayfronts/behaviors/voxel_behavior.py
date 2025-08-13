@@ -14,7 +14,9 @@ class VoxelBehavior:
         self.name = 'Voxel-based'
         self.target_voxel_clusters = {}
         self.target_object = None
-        self.visited_cluster_centers = []
+        self.visited_clusters = []
+        self.unvisited_clusters = []
+        self.prev_voxel_cluster_ids = 0
 
     def condition_check(self, queries_labels, target_object, queries_feats, mapper):
         if queries_labels is None:
@@ -82,13 +84,24 @@ class VoxelBehavior:
                             cy = -center[0]
                             cz = -center[1]
                             sx = size[2]
-                            sy = -size[0]
-                            sz = -size[1]
+                            sy = size[0]
+                            sz = size[1]
                             self.target_voxel_clusters[target_object][vox_cluster_count] = [cx,cy,cz,sx,sy,sz]
                             vox_cluster_count += 1
-                                                
-                        if vox_cluster_count > 0:
-                            return True                
+                        
+                        all_clusters = self.target_voxel_clusters[self.target_object].items()
+                        print("all_clusters: ", all_clusters)
+
+                        print("self.visited_clusters: ", self.visited_clusters)
+
+                        self.unvisited_clusters = [(idx, cluster) for idx, cluster in all_clusters if not self.is_near_visited(np.array(cluster[:3]), np.array(cluster[3:6]), self.visited_clusters)]
+                        print("self.unvisited_clusters: ", self.unvisited_clusters)
+
+
+                        if len(self.unvisited_clusters) > 0:
+                            return True                       
+                        #if vox_cluster_count > 0:
+                        #    return True                
         return False
 
     def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict):
@@ -101,73 +114,100 @@ class VoxelBehavior:
         path_publisher = publisher_dict['path']
 
         all_clusters = self.target_voxel_clusters[self.target_object].items()
+        print("execute:")
+        print("all_clusters: ", all_clusters)
 
-        unvisited_clusters = [(idx, cluster) for idx, cluster in all_clusters 
-                              if not self.is_near_visited(np.array(cluster[:3]), self.visited_cluster_centers)]
-        sorted_voxel_clusters_by_dist = sorted(unvisited_clusters,
+        self.unvisited_clusters = [(idx, cluster) for idx, cluster in all_clusters 
+                              if not self.is_near_visited(np.array(cluster[:3]), np.array(cluster[3:6]), self.visited_clusters)]
+        print("self.unvisited_clusters: ", self.unvisited_clusters)
+        sorted_voxel_clusters_by_dist = sorted(self.unvisited_clusters,
                                                key=lambda item: np.linalg.norm(cur_pose_np - np.array(item[1][:3])))
-        
+        print("sorted_voxel_clusteres_by_dist: ", sorted_voxel_clusters_by_dist)
+
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = 'map'
 
         for i, (idx, cluster) in enumerate(sorted_voxel_clusters_by_dist):
             center = np.array(cluster[:3])
-            mid_pose_np = (cur_pose_np + center) / 2.0
-            dir = center - mid_pose_np
+            sizes = np.array(cluster[3:])
+            half_sizes = sizes / 2.0
+            dir = center - cur_pose_np
             dir_norm = dir / np.linalg.norm(dir)
-            adjacent_np = center - dir_norm * 5.0
-            if i == 0 and not waypoint_locked:
-                target_waypoint1 = mid_pose_np
-                target_waypoint2 = adjacent_np
-                waypoint_locked = True
-            
-            final_mid_pose_np = target_waypoint1 if i == 0 else mid_pose_np
-            final_adj_pose_np = target_waypoint2 if i == 0 else adjacent_np
-            
-            mid_pose = PoseStamped()
-            mid_pose.header.stamp = self.get_clock().now().to_msg()
-            mid_pose.header.frame_id = 'map'
-            mid_pose.pose.position.x = float(final_mid_pose_np[0])
-            mid_pose.pose.position.y = float(final_mid_pose_np[1])
-            mid_pose.pose.position.z = float(final_mid_pose_np[2])
-            mid_pose.pose.orientation.w = 1.0
-            path.poses.append(mid_pose)
+            p_local = cur_pose_np - center
+            t_values = []
+            for axis in range(3):
+                if dir_norm[axis] != 0:
+                    t_pos = ( half_sizes[axis] - p_local[axis]) / dir_norm[axis]
+                    t_neg = (-half_sizes[axis] - p_local[axis]) / dir_norm[axis]
+                    t_values.extend([t_pos, t_neg])
+            t_hit = min(t for t in t_values if t > 0)
+            surface_point = cur_pose_np + dir_norm * t_hit
+            offset = 2.0
+            adjacent_np = surface_point - dir_norm * offset
 
-            adj_pose = PoseStamped()
-            adj_pose.header.stamp = self.get_clock().now().to_msg()
-            adj_pose.header.frame_id = 'map'
-            adj_pose.pose.position.x = float(final_adj_pose_np[0])
-            adj_pose.pose.position.y = float(final_adj_pose_np[1])
-            adj_pose.pose.position.z = float(final_adj_pose_np[2])
-            adj_pose.pose.orientation.w = 1.0
-            path.poses.append(adj_pose)
+            if i == 0:
+                if not waypoint_locked:
+                    target_waypoint2 = adjacent_np
+                    waypoint_locked = True
+                final_adj_pose_np = target_waypoint2
+                
+                final_mid_pose_np = (cur_pose_np + final_adj_pose_np) / 2.0
+                target_waypoint1 = final_mid_pose_np
+                    
+                mid_pose = PoseStamped()
+                mid_pose.header.stamp = self.get_clock().now().to_msg()
+                mid_pose.header.frame_id = 'map'
+                mid_pose.pose.position.x = float(final_mid_pose_np[0])
+                mid_pose.pose.position.y = float(final_mid_pose_np[1])
+                mid_pose.pose.position.z = float(final_mid_pose_np[2])
+                mid_pose.pose.orientation.w = 1.0
+                path.poses.append(mid_pose)
+
+                adj_pose = PoseStamped()
+                adj_pose.header.stamp = self.get_clock().now().to_msg()
+                adj_pose.header.frame_id = 'map'
+                adj_pose.pose.position.x = float(final_adj_pose_np[0])
+                adj_pose.pose.position.y = float(final_adj_pose_np[1])
+                adj_pose.pose.position.z = float(final_adj_pose_np[2])
+                adj_pose.pose.orientation.w = 1.0
+                path.poses.append(adj_pose)
 
         path_publisher.publish(path)
 
-        if np.linalg.norm(cur_pose_np - target_waypoint2) < 2.0:
+        print("cur_pose_np - target_waypoint2 distance: ", np.linalg.norm(cur_pose_np - target_waypoint2))
+        # print("min distance to cuboid", self.min_distance_to_cuboid(self.current_target_cluster, cur_pose_np))
+        # if self.min_distance_to_cuboid(self.current_target_cluster, cur_pose_np) < 3.0:
+        #     self.visited_clusters.append(self.current_target_cluster)
+        #     waypoint_locked = False
+        
+        if np.linalg.norm(cur_pose_np - target_waypoint2) < 5.0:
             if sorted_voxel_clusters_by_dist:
-                first_cluster_center = np.array(sorted_voxel_clusters_by_dist[0][1][:3])
-                self.visited_cluster_centers.append(first_cluster_center)
+                current_close_cluster = np.array(sorted_voxel_clusters_by_dist[0][1])
+                self.visited_clusters.append(current_close_cluster)
             waypoint_locked = False
-
+        
         return waypoint_locked, target_waypoint1, target_waypoint2
 
     def visualize_voxel_cluster_bbox(self, target_object, voxel_bbox_publisher):
+        self.clear_voxel_clusters(voxel_bbox_publisher)
         marker_array = MarkerArray()
         now = self.get_clock().now().to_msg()
-        for cluster_id, center_size_list in self.target_voxel_clusters[target_object].items():
+        #for cluster_id, center_size_list in self.target_voxel_clusters[target_object].items():
+        j = 0
+        for cluster_id, center_size_list in self.unvisited_clusters:
             cx = center_size_list[0]
             cy = center_size_list[1]
             cz = center_size_list[2]
             sx = center_size_list[3]
             sy = center_size_list[4]
             sz = center_size_list[5]
+            print("cx,cy,cz,sx,sy,sz", cx,cy,cz,sx,sy,sz)
             marker = Marker()
             marker.header.frame_id = 'map'
             marker.header.stamp = now
             marker.ns = 'ccl_boxes'
-            marker.id = cluster_id
+            marker.id = j
             marker.type = Marker.CUBE
             marker.action = Marker.ADD
             marker.pose.position.x = cx
@@ -179,7 +219,45 @@ class VoxelBehavior:
             marker.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=0.2)
             marker.lifetime.sec = 1
             marker_array.markers.append(marker)
+            j += 1
+        self.prev_voxel_cluster_ids = j
         voxel_bbox_publisher.publish(marker_array)
     
-    def is_near_visited(self, center, visited_centers, threshold=10.0):
-        return any(np.linalg.norm(center - visited) < threshold for visited in visited_centers)
+    def is_near_visited(self, center, size, visited_clusters, threshold=10.0):
+        return any(self.cuboid_distance(center, size, np.array(visited[:3]), np.array(visited[3:6])) < threshold for visited in visited_clusters)
+
+    def cuboid_distance(self, center_a, size_a, center_b, size_b):
+        half_a = size_a / 2.0
+        half_b = size_b / 2.0
+        dx = max(abs(center_a[0] - center_b[0]) - (half_a[0] + half_b[0]), 0)
+        dy = max(abs(center_a[1] - center_b[1]) - (half_a[1] + half_b[1]), 0)
+        dz = max(abs(center_a[2] - center_b[2]) - (half_a[2] + half_b[2]), 0)
+        return np.sqrt(dx ** 2 + dy ** 2 + dz ** 2)
+    
+    def clear_voxel_clusters(self, voxel_bbox_publisher):
+        if self.prev_voxel_cluster_ids > 0:
+            clear_marker_array = MarkerArray()
+            for i in range(self.prev_voxel_cluster_ids):
+                clear_marker = Marker()
+                clear_marker.header.frame_id = 'map'
+                clear_marker.header.stamp = self.get_clock().now().to_msg()
+                clear_marker.ns = 'ccl_boxes'
+                clear_marker.id = i
+                clear_marker.action = Marker.DELETE
+                clear_marker_array.markers.append(clear_marker)
+            voxel_bbox_publisher.publish(clear_marker_array)
+
+    def min_distance_to_cuboid(self, cluster, cur_pose_np):
+        cx,cy,cz, sx,sy,sz = cluster
+        px, py, pz = cur_pose_np
+
+        min_x, max_x = cx - sx / 2.0, cx + sx / 2.0
+        min_y, max_y = cy - sy / 2.0, cy + sy / 2.0
+        min_z, max_z = cz - sz / 2.0, cz + sz / 2.0
+
+        closest_x = np.clip(px, min_x, max_x)
+        closest_y = np.clip(py, min_y, max_y)
+        closest_z = np.clip(pz, min_z, max_z)
+
+        return np.linalg.norm([px - closest_x, py - closest_y, pz - closest_z])
+

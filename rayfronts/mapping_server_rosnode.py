@@ -88,13 +88,15 @@ class MappingServer(Node):
     self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
 
     self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
+    self.ray_gradients_publisher = self.create_publisher(MarkerArray, '/ray_gradients', 10)
 
     self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
     self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher=self.mode_text_publisher)
 
     self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
 
-    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
+    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher, 'ray_gradients': self.ray_gradients_publisher}
+
 
     self.waypoint_locked = False
     self.target_waypoint = None
