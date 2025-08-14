@@ -245,6 +245,14 @@ class Ros2Subscriber(PosedRgbdDataset):
       # Parse Pose
       src_pose_4x4 = torch.tensor(
         pose_to_numpy(msgs["pose"].pose), dtype=torch.float)
+      transform_test = True
+      if transform_test:
+          pitch = 0.261799
+          R_pitch = np.array([[np.cos(pitch),0,np.sin(pitch)],[0,1,0],[-np.sin(pitch),0,np.cos(pitch)]],dtype=np.float32)
+          T = np.eye(4,dtype=np.float32)
+          T[:3,:3] = R_pitch
+          T_base_to_cam = T
+          src_pose_4x4 = src_pose_4x4 @ T_base_to_cam
       rdf_pose_4x4 = g3d.transform_pose_4x4(
         src_pose_4x4, self.src2rdf_transform)
 
