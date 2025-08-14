@@ -29,9 +29,12 @@ import hydra
 import struct
 
 from rayfronts import datasets, visualizers, image_encoders, mapping, utils
+from rayfronts.behavior_manager import BehaviorManager
+from rayfronts.mode_text_visualizer import ModeTextVisualizer
 
 import rclpy
 from rclpy.node import Node
+import std_msgs.msg
 from std_msgs.msg import String
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
@@ -76,11 +79,33 @@ class MappingServer(Node):
     self.cfg = cfg
     self.dataset: datasets.PosedRgbdDataset = \
       hydra.utils.instantiate(cfg.dataset)
+
+    self.behavior_manager = BehaviorManager(get_clock=self.get_clock)
     
-    self.path_publisher = self.create_publisher(Path, '/robot_2/global_plan', 10)
-    self.pc2_publisher = self.create_publisher(PointCloud2, '/colored_pointcloud', 10)
-    self.rays_publisher = self.create_publisher(MarkerArray, '/rays', 10)
+    self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
+    #self.pc2_publisher = self.create_publisher(PointCloud2, '/colored_pointcloud', 10)
+    #self.rays_publisher = self.create_publisher(MarkerArray, '/rays', 10)
+    self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
+
     self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
+
+    self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
+    self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher = self.mode_text_publisher)
+
+    self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
+
+    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
+
+    self.waypoint_locked = False
+    self.target_waypoint = None
+    self.target_waypoint2 = None
+
+    self.behavior_mode = 'Frontier-based'
+
+    self.prev_filtered_marker_ids = 0
+
+    self._target_object = None
+    self.create_subscription(String, '/input_text', self.target_object_callback, 10)
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -295,6 +320,10 @@ class MappingServer(Node):
       rgb_img = batch["rgb_img"].cuda()
       depth_img = batch["depth_img"].cuda()
       pose_4x4 = batch["pose_4x4"].cuda()
+
+      pose_4x4_np = pose_4x4.cpu().numpy()
+      cur_pose_np = np.array([float(pose_4x4_np[0][2,3]), float(-pose_4x4_np[0][0,3]), float(-pose_4x4_np[0][1,3])])
+
       kwargs = dict()
       if "confidence_map" in batch.keys():
         kwargs["conf_map"] = batch["confidence_map"].cuda()
@@ -313,99 +342,23 @@ class MappingServer(Node):
           self.vis.log_depth_img(depth_img.cpu()[-1].squeeze())
 
       map_t0 = time.time()
-
-      #visualize 3d voxels on rviz
-      r, pc_xyz, pc_rgb, pc_feat, ray_angles, ray_feat = self.mapper.process_posed_rgbd(rgb_img, depth_img, pose_4x4, **kwargs)
-      if pc_xyz is not None and pc_rgb is not None and pc_feat is not None:
-        #filter out sky voxels
-        pc_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(pc_feat.unsqueeze(-1).unsqueeze(-1)).squeeze()
-        pc_sim_score = compute_cos_sim(self.sky_feat, pc_lang_aligned, softmax=False)
-        sky_indices = torch.nonzero(pc_sim_score > 0.02, as_tuple=True)[0]
-        print('sky', sky_indices.shape)
-        mask = torch.ones(pc_xyz.size(0),dtype=torch.bool)
-        mask[sky_indices] = False
-        pc_xyz_ = pc_xyz[mask]
-        pc_rgb_ = pc_rgb[mask] 
-
-        colored_pc_msg = self.create_colored_pointcloud_msg(pc_xyz_, pc_rgb_)
-        self.pc2_publisher.publish(colored_pc_msg)
-      
-      #visualize rays from rayfronts
-      if ray_angles is not None and ray_feat is not None and ray_feat.shape[0] > 0:
-        rorig = ray_angles[:,:3]
-        ang = torch.deg2rad(ray_angles[:,3:])
-        rdir = torch.stack(g3d.spherical_to_cartesian(1,ang[:,0],ang[:,1]),dim=-1)
-        rviz_rays = True
-        if rviz_rays:
-          arrow_length=1
-          marker_array = MarkerArray()
-          assert rorig.shape[0] == rdir.shape[0]
-          for i in range(rorig.shape[0]):
-            p0_ = rorig[i].cpu().numpy()
-            p0 = np.array([p0_[2],-p0_[0],-p0_[1]])
-            dir0_ = rdir[i].cpu().numpy()
-            dir0 = np.array([dir0_[2],-dir0_[0],-dir0_[1]])
-            p1 = p0 + arrow_length * dir0
-            arrow = Marker()
-            arrow.header.frame_id = 'map'
-            arrow.header.stamp = self.get_clock().now().to_msg()
-            arrow.ns = "arrows"
-            arrow.id = i
-            arrow.type = Marker.ARROW
-            arrow.action = Marker.ADD
-            arrow.points=[Point(x=float(p0[0]),y=float(p0[1]),z=float(p0[2])), Point(x=float(p1[0]),y=float(p1[1]),z=float(p1[2]))]
-            arrow.scale.x = 0.2
-            arrow.scale.y = 0.4
-            arrow.scale.z = 0.25
-            arrow.color.r = 0.5
-            arrow.color.g = 0.8
-            arrow.color.b = 0.9
-            arrow.color.a = 0.8
-            marker_array.markers.append(arrow)
-          self.rays_publisher.publish(marker_array)
-      
-        #visualize filtered_rays
-        print("ray_feat shape", ray_feat.shape)
-        ray_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1)).squeeze()
-        if self._queries_feats is not None:
-          #from pdb import set_trace as bp
-          #bp()
-          ray_scores = compute_cos_sim(self._queries_feats['text'], ray_lang_aligned, softmax=False)
-          indices = torch.nonzero(ray_scores>0.1, as_tuple=True)[0]
-          filtered_origins = rorig[indices]
-          filtered_directions = rdir[indices]
-          rviz_filtered_rays = True
-          if rviz_filtered_rays:
-            arrow_length = 4
-            marker_array = MarkerArray()
-            assert filtered_origins.shape[0] == filtered_directions.shape[0]
-            for i in range(filtered_directions.shape[0]):
-              p0_ = filtered_origins[i].cpu().numpy()
-              p0 = np.array([p0_[2],-p0_[0],-p0_[1]])
-              dir0_ = filtered_directions[i].cpu().numpy()
-              dir0 = np.array([dir0_[2],-dir0_[0],-dir0_[1]])
-              p1 = p0 + arrow_length*dir0
-              arrow = Marker()
-              arrow.header.frame_id = 'map'
-              arrow.header.stamp = self.get_clock().now().to_msg()
-              arrow.ns = "arrows"
-              arrow.id = i
-              arrow.type = Marker.ARROW
-              arrow.action = Marker.ADD
-              arrow.points = [Point(x=float(p0[0]),y=float(p0[1]),z=float(p0[2])), Point(x=float(p1[0]),y=float(p1[1]),z=float(p1[2]))]
-              arrow.scale.x=  0.6 #shaft diameter
-              arrow.scale.y = 1.2 #head diameter
-              arrow.scale.z = 0.75 #head length
-              arrow.color.r = 1.0
-              arrow.color.g = 0.2
-              arrow.color.b = 0.6
-              arrow.color.a = 1.0
-              marker_array.markers.append(arrow)
-            self.filtered_rays_publisher.publish(marker_array)
-
-
-
+      r = self.mapper.process_posed_rgbd(rgb_img, depth_img, pose_4x4, **kwargs)
       map_t1 = time.time()
+
+      #behavior manager selects mode
+      self.behavior_manager.mode_select(queries_labels=self._queries_labels,target_object = self._target_object, queries_feats = self._queries_feats, mapper=self.mapper)
+
+      if self.behavior_mode != self.behavior_manager.behavior_mode:
+          self.mode_switch_trigger()
+
+      self.behavior_mode = self.behvaior_manager.behavior_mode
+
+      #RVIZ visualizer for /mode_text
+      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
+
+      point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
+
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict)
 
       if self.vis is not None:
         if i % self.cfg.vis.input_period == 0:
@@ -500,6 +453,51 @@ class MappingServer(Node):
     with self._status_lock:
       self.status = MappingServer.Status.CLOSED
 
+  def target_object_callback(self, msg):
+  	data_cleaned = msg.data.strip().lower()
+  	if data_cleaned == "":
+  		self._target_object = None
+  	else:
+  		self._target_object = data_cleaned
+  	print("self._target_object", self._target_object)
+  	if self._target_object is not None and self._target_object not in self._queries_labels['text']:
+  		self.add_queries(self._target_object)
+  
+  def mode_switch_trigger(self):
+  	self.waypoint_locked = False
+  	self.target_waypoint = None
+  	self.target_waypoint2 = None
+  
+  def clear_filtered_rays(self):
+  	if self.prev_filtered_marker_ids > 0:
+  		clear_marker_array = MarkerArray()
+  		for i in range(self.prev_filtered_marker_ids):
+  			clear_marker = Marker()
+  			clear_marker.header.frame_id = "map"
+  			clear_marker.header.stamp = self.get_clock().now().to_msg()
+  			clear_marker.ns = "arrows"
+  			clear_marker.id = i
+  			clear_marker.action = Marker.DELETE
+  			clear_marker_array.markers.append(clear_marker)
+  		self.filtered_rays_publisher.publish(clear_marker_aray)
+  
+  def create_pointcloud2_msg(self, xyz):
+  	if isinstance(xyz, torch.Tensor):
+  		xyz = xyz.detach().cpu().numpy()
+  	elif isinstance(xyz, np.ndarray):
+  		xyz = xyz
+  	else:
+  		raise TypeError(f"Expected torch.Tensor or numpy.ndarray, got {type(xyz)}")
+  	header = Header()
+  	header.stamp = self.get_clock().now().to_msg()
+  	header.frame_id = 'map'
+  	field = [PointField(name='x',offset=0,datatype=PointField.FLOAT32, count=1), PointField(name='y',offset=4,datatype=PointField.FLOAT32, count=1), PointField(name='z',offset=8,datatype=PointField.FLOAT32, count=1)]
+  	points = []
+  	for i in range(xyz.shape[0]):
+  		x,y,z = xyz[i]
+  		points.append([x,y,z])
+  	return point_cloud2.create_cloud(header, fields, points)
+  
   def create_colored_pointcloud_msg(self, xyz_tensor, rgb_tensor):
     xyz = xyz_tensor.cpu().numpy()
     rgb = (rgb_tensor*255).cpu().numpy()
@@ -562,6 +560,8 @@ def main(cfg = None):
     logger.info("Shutdown before initializing completed.")
     return
 
+  spin_thread = threading.Thread(target=rclpy.spin, args=(server,), daemon=True)
+  spin_thread.start()
   signal.signal(signal.SIGINT, partial(signal_handler, server))
   try:
     server.run()
