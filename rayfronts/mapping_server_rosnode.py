@@ -30,7 +30,7 @@ import struct
 
 from rayfronts import datasets, visualizers, image_encoders, mapping, utils
 from rayfronts.behavior_manager import BehaviorManager
-from rayfronts.mode_text_visualizer import ModeTextVisualizer
+#from rayfronts.mode_text_visualizer import ModeTextVisualizer
 
 import rclpy
 from rclpy.node import Node
@@ -89,8 +89,8 @@ class MappingServer(Node):
 
     self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
 
-    self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
-    self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher = self.mode_text_publisher)
+    #self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
+    #self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher = self.mode_text_publisher)
 
     self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
 
@@ -351,10 +351,10 @@ class MappingServer(Node):
       if self.behavior_mode != self.behavior_manager.behavior_mode:
           self.mode_switch_trigger()
 
-      self.behavior_mode = self.behvaior_manager.behavior_mode
+      self.behavior_mode = self.behavior_manager.behavior_mode
 
       #RVIZ visualizer for /mode_text
-      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
+      #self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
 
       point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 

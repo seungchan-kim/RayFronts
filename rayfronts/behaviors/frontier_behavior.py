@@ -26,7 +26,7 @@ class FrontierBehavior:
             transformed_frontiers = torch.stack([mapper.frontiers[:,2],-mapper.frontiers[:,0], -mapper.frontiers[:,1]], dim=1)
 
             #filter out frontier points that are under the height of 1.5m
-            transformed_frontiers = transformed_frontiers[transformed_frontiers[:,2]] > 1.5
+            transformed_frontiers = transformed_frontiers[transformed_frontiers[:,2] > 1.5]
 
             #DBSCAN clustering for frontier-points
             frontiers_cpu = transformed_frontiers.detach().cpu().numpy()
@@ -42,7 +42,7 @@ class FrontierBehavior:
                 centroid_torch = centroid_torch.to(transformed_frontiers.device, dtype = transformed_frontiers.dtype)
 
                 if centroid_torch[2] > 2.0:
-                    viewpoins.append(centroid_torch)
+                    viewpoints.append(centroid_torch)
             viewpoints = torch.stack(viewpoints)
 
             cent_msg = self.create_pointcloud2_msg(viewpoints)
@@ -75,7 +75,7 @@ class FrontierBehavior:
                 target_waypoint = best_cent_np
                 direction = target_waypoint - cur_pose_np
                 direction = direction / np.linalg.norm(target_waypoint - cur_pose_np)
-                target_waypoint2 = taget_waypoint + 2.0*direction
+                target_waypoint2 = target_waypoint + 2.0*direction
                 waypoint_locked = True
 
             target_pose = PoseStamped()
@@ -101,21 +101,20 @@ class FrontierBehavior:
             	waypoint_locked = False
             	
         return waypoint_locked, target_waypoint, target_waypoint2
-
-
-	def create_pointcloud2_msg(self, xyz):
-  		if isinstance(xyz, torch.Tensor):
-  			xyz = xyz.detach().cpu().numpy()
-  		elif isinstance(xyz, np.ndarray):
-  			xyz = xyz
-  		else:
-  			raise TypeError(f"Expected torch.Tensor or numpy.ndarray, got {type(xyz)}")
-  		header = Header()
-  		header.stamp = self.get_clock().now().to_msg()
-  		header.frame_id = 'map'
-  		field = [PointField(name='x',offset=0,datatype=PointField.FLOAT32, count=1), PointField(name='y',offset=4,datatype=PointField.FLOAT32, count=1), PointField(name='z',offset=8,datatype=PointField.FLOAT32, count=1)]
-  		points = []
-  		for i in range(xyz.shape[0]):
-  			x,y,z = xyz[i]
-  			points.append([x,y,z])
-  		return point_cloud2.create_cloud(header, fields, points)
+    
+    def create_pointcloud2_msg(self, xyz):
+        if isinstance(xyz, torch.Tensor):
+            xyz = xyz.detach().cpu().numpy()
+        elif isinstance(xyz, np.ndarray):
+            xyz = xyz
+        else:
+            raise TypeError(f"Expected torch.Tensor or numpy.ndarray, got {type(xyz)}")
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = 'map'
+        fields = [PointField(name='x',offset=0,datatype=PointField.FLOAT32, count=1), PointField(name='y',offset=4,datatype=PointField.FLOAT32, count=1), PointField(name='z',offset=8,datatype=PointField.FLOAT32, count=1)]
+        points = []
+        for i in range(xyz.shape[0]):
+            x,y,z = xyz[i]
+            points.append([x,y,z])
+        return point_cloud2.create_cloud(header, fields, points)

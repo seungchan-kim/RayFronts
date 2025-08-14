@@ -3,8 +3,8 @@ import time
 import numpy as np
 
 from rayfronts.behaviors.frontier_behavior import FrontierBehavior
-from rayfronts.behaviors.voxel_behavior import VoxelBehavior
-from rayfronts.behaviors.ray_behavior import RayBehavior
+#from rayfronts.behaviors.voxel_behavior import VoxelBehavior
+#from rayfronts.behaviors.ray_behavior import RayBehavior
 from rayfronts.utils import compute_cos_sim
 
 from visualization_msgs.msg import Marker, MarkerArray
@@ -15,8 +15,8 @@ class BehaviorManager:
     def __init__(self, get_clock):
         self.behavior_mode = 'Frontier-based'
         self.get_clock = get_clock
-        self.voxel_behavior = VoxelBehavior(self.get_clock)
-        self.ray_behavior = RayBehavior(self.get_clock)
+        #self.voxel_behavior = VoxelBehavior(self.get_clock)
+        #self.ray_behavior = RayBehavior(self.get_clock)
         self.frontier_behavior = FrontierBehavior(self.get_clock)
         self.behaviors = [self.frontier_behavior]
 
@@ -31,11 +31,11 @@ class BehaviorManager:
             wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
             return wp_locked, tw1, tw2
 
-        elif behavior_mode == 'Voxel-based':
-            wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
-            return wp_locked, tw1, tw2
+        #elif behavior_mode == 'Voxel-based':
+        #    wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
+        #    return wp_locked, tw1, tw2
 
         
-        elif behavior_mode == 'Ray-based':
-            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
-            return wp_locked, tw1, tw2
+        #elif behavior_mode == 'Ray-based':
+        #    wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
+        #    return wp_locked, tw1, tw2
