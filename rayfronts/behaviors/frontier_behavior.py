@@ -66,8 +66,14 @@ class FrontierBehavior:
             else:
                 scores = distances
             
-            best_idx = torch.argsort(scores)[0]
-            best_cent = viewpoints[best_idx]
+            top_n = 5
+            num_candidates = min(top_n, viewpoints.shape[0])
+            top_indices = torch.argsort(scores)[:num_candidates]
+            best_idx = top_indices[torch.randint(0, num_candidates, (1,))]
+            best_cent = viewpoints[best_idx].view(-1)
+            #from pdb import set_trace as bp; bp()
+            #best_idx = torch.argsort(scores)[0]
+            #best_cent = viewpoints[best_idx]
 
             path = Path()
             path.header.stamp = self.get_clock().now().to_msg()
@@ -122,7 +128,7 @@ class FrontierBehavior:
         points = []
         for i in range(xyz.shape[0]):
             x,y,z = xyz[i]
-        points.append([x,y,z])
+            points.append([x,y,z])
         return point_cloud2.create_cloud(header, fields, points)
 
 
