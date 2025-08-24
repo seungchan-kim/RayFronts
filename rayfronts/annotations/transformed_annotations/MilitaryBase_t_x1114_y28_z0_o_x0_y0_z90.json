@@ -1,0 +1,212 @@
+[
+  {
+    "class": "radio tower",
+    "bbox_world": {
+      "center_xyz_m": [
+        151.3,
+        -118.40000000000009,
+        23.7
+      ],
+      "size_xyz_m": [
+        20.7,
+        20.7,
+        47.5
+      ]
+    }
+  },
+  {
+    "class": "guard tower",
+    "bbox_world": {
+      "center_xyz_m": [
+        155.6,
+        -3.0,
+        5.2
+      ],
+      "size_xyz_m": [
+        5.8,
+        8.0,
+        10.8
+      ]
+    }
+  },
+  {
+    "class": "guard tower",
+    "bbox_world": {
+      "center_xyz_m": [
+        164.3,
+        60.59999999999991,
+        4.8
+      ],
+      "size_xyz_m": [
+        7.9,
+        7.6,
+        9.6
+      ]
+    }
+  },
+  {
+    "class": "airfield",
+    "bbox_world": {
+      "center_xyz_m": [
+        -80.7,
+        -69.79999999999995,
+        1.8
+      ],
+      "size_xyz_m": [
+        127.4,
+        205.9,
+        4.2
+      ]
+    }
+  },
+  {
+    "class": "mobile radar",
+    "bbox_world": {
+      "center_xyz_m": [
+        252.0,
+        -6.0,
+        2.4
+      ],
+      "size_xyz_m": [
+        6.5,
+        4.1,
+        4.9
+      ]
+    }
+  },
+  {
+    "class": "mobile radar",
+    "bbox_world": {
+      "center_xyz_m": [
+        252.0,
+        -36.0,
+        1.5
+      ],
+      "size_xyz_m": [
+        3.9,
+        2.3,
+        2.9
+      ]
+    }
+  },
+  {
+    "class": "radio tower",
+    "bbox_world": {
+      "center_xyz_m": [
+        -28.0,
+        44.0,
+        23.7
+      ],
+      "size_xyz_m": [
+        20.7,
+        20.7,
+        47.5
+      ]
+    }
+  },
+  {
+    "class": "helicopter",
+    "bbox_world": {
+      "center_xyz_m": [
+        225.0,
+        -46.0,
+        2.5
+      ],
+      "size_xyz_m": [
+        12.0,
+        8.0,
+        5.0
+      ]
+    }
+  },
+  {
+    "class": "helicopter",
+    "bbox_world": {
+      "center_xyz_m": [
+        -70.0,
+        19.0,
+        0.5
+      ],
+      "size_xyz_m": [
+        12.0,
+        8.0,
+        5.0
+      ]
+    }
+  },
+  {
+    "class": "ATV",
+    "bbox_world": {
+      "center_xyz_m": [
+        242.0,
+        64.0,
+        1.5
+      ],
+      "size_xyz_m": [
+        4.0,
+        3.0,
+        3.0
+      ]
+    }
+  },
+  {
+    "class": "ATV",
+    "bbox_world": {
+      "center_xyz_m": [
+        197.0,
+        60.0,
+        1.5
+      ],
+      "size_xyz_m": [
+        4.0,
+        3.0,
+        3.0
+      ]
+    }
+  },
+  {
+    "class": "ATV",
+    "bbox_world": {
+      "center_xyz_m": [
+        174.0,
+        54.0,
+        1.5
+      ],
+      "size_xyz_m": [
+        4.0,
+        3.0,
+        3.0
+      ]
+    }
+  },
+  {
+    "class": "ATV",
+    "bbox_world": {
+      "center_xyz_m": [
+        216.0,
+        20.0,
+        1.5
+      ],
+      "size_xyz_m": [
+        3.0,
+        4.0,
+        3.0
+      ]
+    }
+  },
+  {
+    "class": "bridge",
+    "bbox_world": {
+      "center_xyz_m": [
+        47.0,
+        -4.0,
+        2.5
+      ],
+      "size_xyz_m": [
+        80.0,
+        20.0,
+        5.0
+      ]
+    }
+  }
+]

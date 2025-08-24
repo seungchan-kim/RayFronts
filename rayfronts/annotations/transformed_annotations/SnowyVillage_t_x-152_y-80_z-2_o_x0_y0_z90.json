@@ -1,0 +1,152 @@
+[
+  {
+    "class": "pond",
+    "bbox_world": {
+      "center_xyz_m": [
+        77.4,
+        31.599999999999994,
+        -3.0
+      ],
+      "size_xyz_m": [
+        103.5,
+        103.5,
+        0.8
+      ]
+    }
+  },
+  {
+    "class": "human",
+    "bbox_world": {
+      "center_xyz_m": [
+        63.3,
+        38.0,
+        -2.2
+      ],
+      "size_xyz_m": [
+        2.0,
+        1.4,
+        1.9
+      ]
+    }
+  },
+  {
+    "class": "water tower",
+    "bbox_world": {
+      "center_xyz_m": [
+        118.2,
+        13.599999999999994,
+        9.5
+      ],
+      "size_xyz_m": [
+        26.0,
+        26.0,
+        18.3
+      ]
+    }
+  },
+  {
+    "class": "car",
+    "bbox_world": {
+      "center_xyz_m": [
+        112.5,
+        -18.5,
+        1.7
+      ],
+      "size_xyz_m": [
+        3.0,
+        4.8,
+        2.4
+      ]
+    }
+  },
+  {
+    "class": "outhouse",
+    "bbox_world": {
+      "center_xyz_m": [
+        96.3,
+        -39.900000000000006,
+        2.1
+      ],
+      "size_xyz_m": [
+        2.2,
+        2.2,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "car",
+    "bbox_world": {
+      "center_xyz_m": [
+        111.7,
+        -27.5,
+        1.6
+      ],
+      "size_xyz_m": [
+        2.3,
+        4.3,
+        2.0
+      ]
+    }
+  },
+  {
+    "class": "outhouse",
+    "bbox_world": {
+      "center_xyz_m": [
+        35.5,
+        14.300000000000011,
+        0.3999999999999999
+      ],
+      "size_xyz_m": [
+        2.4,
+        2.4,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "outhouse",
+    "bbox_world": {
+      "center_xyz_m": [
+        15.200000000000003,
+        -32.900000000000006,
+        1.5
+      ],
+      "size_xyz_m": [
+        2.4,
+        2.4,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "outhouse",
+    "bbox_world": {
+      "center_xyz_m": [
+        47.5,
+        -43.900000000000006,
+        2.2
+      ],
+      "size_xyz_m": [
+        2.0,
+        1.9,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "outhouse",
+    "bbox_world": {
+      "center_xyz_m": [
+        67.8,
+        -44.599999999999994,
+        1.6
+      ],
+      "size_xyz_m": [
+        2.7,
+        2.3,
+        3.2
+      ]
+    }
+  }
+]

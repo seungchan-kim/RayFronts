@@ -1,0 +1,422 @@
+[
+  {
+    "class": "asphalt roller",
+    "bbox_world": {
+      "center_xyz_m": [
+        34.9,
+        96.3,
+        1.7
+      ],
+      "size_xyz_m": [
+        5.0,
+        6.2,
+        3.3
+      ]
+    }
+  },
+  {
+    "class": "asphalt roller",
+    "bbox_world": {
+      "center_xyz_m": [
+        52.3,
+        78.3,
+        2.0999999999999996
+      ],
+      "size_xyz_m": [
+        5.1,
+        6.3,
+        3.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        19.0,
+        78.1,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.5,
+        1.5,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        16.6,
+        80.3,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.4,
+        1.4,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        16.6,
+        82.1,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.3,
+        1.3,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        35.7,
+        1.3999999999999986,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.7,
+        1.7,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        34.4,
+        2.1000000000000014,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.4,
+        1.4,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        36.4,
+        -0.7999999999999972,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.2,
+        1.2,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "biotoilet",
+    "bbox_world": {
+      "center_xyz_m": [
+        36.1,
+        -4.299999999999997,
+        1.2
+      ],
+      "size_xyz_m": [
+        1.5,
+        1.5,
+        2.5
+      ]
+    }
+  },
+  {
+    "class": "cabling winches",
+    "bbox_world": {
+      "center_xyz_m": [
+        34.7,
+        -15.200000000000003,
+        1.1
+      ],
+      "size_xyz_m": [
+        3.6,
+        3.1,
+        2.2
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        39.2,
+        78.2,
+        3.8999999999999995
+      ],
+      "size_xyz_m": [
+        6.2,
+        2.7,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        -17.9,
+        45.8,
+        3.8999999999999995
+      ],
+      "size_xyz_m": [
+        6.5,
+        3.6,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        -19.1,
+        49.1,
+        3.8999999999999995
+      ],
+      "size_xyz_m": [
+        6.2,
+        2.8,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        4.100000000000001,
+        1.3
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        6.600000000000001,
+        1.3
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        9.0,
+        1.3
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        6.600000000000001,
+        3.8999999999999995
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        9.100000000000001,
+        3.8999999999999995
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "red container",
+    "bbox_world": {
+      "center_xyz_m": [
+        33.7,
+        11.5,
+        1.3
+      ],
+      "size_xyz_m": [
+        6.1,
+        2.5,
+        2.6
+      ]
+    }
+  },
+  {
+    "class": "forklift",
+    "bbox_world": {
+      "center_xyz_m": [
+        19.6,
+        17.3,
+        2.3
+      ],
+      "size_xyz_m": [
+        6.6,
+        10.9,
+        4.6
+      ]
+    }
+  },
+  {
+    "class": "forklift",
+    "bbox_world": {
+      "center_xyz_m": [
+        -7.100000000000001,
+        4.600000000000001,
+        2.3
+      ],
+      "size_xyz_m": [
+        10.7,
+        5.7,
+        4.6
+      ]
+    }
+  },
+  {
+    "class": "forklift",
+    "bbox_world": {
+      "center_xyz_m": [
+        -10.799999999999997,
+        57.0,
+        2.3
+      ],
+      "size_xyz_m": [
+        7.9,
+        10.9,
+        4.6
+      ]
+    }
+  },
+  {
+    "class": "yellow towercrane",
+    "bbox_world": {
+      "center_xyz_m": [
+        51.0,
+        51.0,
+        24.8
+      ],
+      "size_xyz_m": [
+        4.0,
+        5.0,
+        50.0
+      ]
+    }
+  },
+  {
+    "class": "orange towercrane",
+    "bbox_world": {
+      "center_xyz_m": [
+        -3.0,
+        -10.5,
+        39.8
+      ],
+      "size_xyz_m": [
+        4.0,
+        6.0,
+        80.0
+      ]
+    }
+  },
+  {
+    "class": "construction lift",
+    "bbox_world": {
+      "center_xyz_m": [
+        4.0,
+        -18.0,
+        15.8
+      ],
+      "size_xyz_m": [
+        5.0,
+        5.0,
+        32.0
+      ]
+    }
+  },
+  {
+    "class": "blue tarp",
+    "bbox_world": {
+      "center_xyz_m": [
+        21.0,
+        -18.0,
+        15.8
+      ],
+      "size_xyz_m": [
+        20.0,
+        3.0,
+        32.0
+      ]
+    }
+  },
+  {
+    "class": "blue tarp",
+    "bbox_world": {
+      "center_xyz_m": [
+        -9.0,
+        23.0,
+        7.8
+      ],
+      "size_xyz_m": [
+        3.0,
+        10.0,
+        16.0
+      ]
+    }
+  },
+  {
+    "class": "orange tarp",
+    "bbox_world": {
+      "center_xyz_m": [
+        61.0,
+        68.0,
+        9.8
+      ],
+      "size_xyz_m": [
+        3.0,
+        20.0,
+        20.0
+      ]
+    }
+  }
+]
