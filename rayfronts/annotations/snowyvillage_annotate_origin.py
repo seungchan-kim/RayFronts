@@ -1,9 +1,9 @@
 import json
 
-target_classes = ['fountain_fx', 'food_cart', 'prop_recycle_bin', 'fire_hydrant', 'light_streetlight_complete']
+target_classes = ['water_tower', 'fisherman_animated_sequence', 'car', 'outhouse', 'water_ice_plane']
 
 # Load JSON
-with open("downtown_west_labels_pose_bbox_v3.json", "r") as f:
+with open("snowy_village_labels_pose_bbox_v2.json", "r") as f:
     data = json.load(f)
 
 # To store filtered and processed items
@@ -14,20 +14,20 @@ seen_bboxes = set()
 
 for item in data:
     if "class" in item and item["class"] in target_classes:
-        if "asset_root" in item and "FountainFX" in item["asset_root"]:
-            item['class'] = 'fountain'
-        elif "asset_root" in item and "food_cart" in item["asset_root"]:
-            item['class'] = 'food cart'
-        elif "asset_root" in item and "recycle_bin" in item["asset_root"]:
-            item['class'] = 'recycle bin'
-        elif "asset_root" in item and "streetlight_complete" in item["asset_root"]:
-            item['class'] = 'traffic light'
-        elif "asset_root" in item and "Fire_Hydrant" in item["asset_root"]:
-            item['class'] = 'fire hydrant'
+        if "asset_root" in item and "WaterTower" in item["asset_root"]:
+            item['class'] = 'water tower'
+        elif "asset_root" in item and "Fisherman03_Animated_Sequence" in item["asset_root"]:
+            item['class'] = 'human'
+        elif "asset_root" in item and "Car01" in item["asset_root"]:
+            item['class'] = 'car'
+        elif "asset_root" in item and "Outhouse" in item["asset_root"]:
+            item['class'] = 'outhouse'
+        elif "asset_root" in item and "WaterIcePlane" in item["asset_root"]:
+            item['class'] = 'pond'
 
         bbox = item.get("bbox_world", {})
-        center = bbox.get("center_xyz")
-        size = bbox.get("size_xyz")
+        center = bbox.get("center_xyz_m")
+        size = bbox.get("size_xyz_m")
         
         if center and size:
             # Round values to 1 decimal
@@ -41,8 +41,8 @@ for item in data:
                 seen_bboxes.add(bbox_tuple)
                 
                 # Update the item with rounded values
-                item["bbox_world"]["center_xyz"] = center_rounded
-                item["bbox_world"]["size_xyz"] = size_rounded
+                item["bbox_world"]["center_xyz_m"] = center_rounded
+                item["bbox_world"]["size_xyz_m"] = size_rounded
                 
                 processed.append({"class": item["class"], "bbox_world": {"center_xyz_m": center_rounded, "size_xyz_m": size_rounded}})
 
@@ -52,6 +52,6 @@ for item in processed:
     print({"class": item["class"], "bbox_world": {"center_xyz_m": item["bbox_world"]["center_xyz_m"], "size_xyz_m": item["bbox_world"]["size_xyz_m"]}})
 
 # Optionally, save to a new JSON
-with open("downtownwest_filtered.json", "w") as f:
+with open("snowyvillage_filtered.json", "w") as f:
     json.dump(processed, f, indent=2)
 
