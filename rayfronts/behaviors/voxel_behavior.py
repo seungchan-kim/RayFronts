@@ -7,6 +7,7 @@ import scipy.ndimage
 from rayfronts.utils import compute_cos_sim
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
+import random
 
 class VoxelBehavior:
     def __init__(self, get_clock):
@@ -18,7 +19,7 @@ class VoxelBehavior:
         self.unvisited_clusters = []
         self.prev_voxel_cluster_ids = 0
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper):
+    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
         if queries_labels is None:
             return False
         
@@ -48,7 +49,7 @@ class VoxelBehavior:
                 if queries_feats is not None:
                     vox_scores = compute_cos_sim(queries_feats['text'], vox_lang_aligned, softmax=True)
                     print("vox_scores", torch.round(vox_scores*1000)/1000)
-                    threshold = 0.95
+                    threshold = 0.98
                     indices = (vox_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
 
                     filtered_vox = vox_xyz[indices]
@@ -104,7 +105,7 @@ class VoxelBehavior:
                         #    return True                
         return False
 
-    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict):
+    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
         voxel_bbox_publisher = publisher_dict['voxel_bbox']
         self.visualize_voxel_cluster_bbox(self.target_object, voxel_bbox_publisher)
 
@@ -134,14 +135,22 @@ class VoxelBehavior:
             half_sizes = sizes / 2.0
             dir = center - cur_pose_np
             dir_norm = dir / np.linalg.norm(dir)
-            p_local = cur_pose_np - center
-            t_values = []
+            
+            ray_origin_local = cur_pose_np - center
+
+            tmin, tmax = -np.inf, np.inf
             for axis in range(3):
                 if dir_norm[axis] != 0:
-                    t_pos = ( half_sizes[axis] - p_local[axis]) / dir_norm[axis]
-                    t_neg = (-half_sizes[axis] - p_local[axis]) / dir_norm[axis]
-                    t_values.extend([t_pos, t_neg])
-            t_hit = min(t for t in t_values if t > 0)
+                    t1 = (-half_sizes[axis] - ray_origin_local[axis]) / dir_norm[axis]
+                    t2 = ( half_sizes[axis] - ray_origin_local[axis]) / dir_norm[axis]
+                    tmin = max(tmin, min(t1,t2))
+                    tmax = min(tmax, max(t1,t2))
+                else:
+                    if abs(ray_origin_local[axis]) > half_sizes[axis]:
+                        continue
+            if tmax < max(tmin, 0):
+                continue
+            t_hit = tmin if tmin > 0 else tmax
             surface_point = cur_pose_np + dir_norm * t_hit
             offset = 2.0
             adjacent_np = surface_point - dir_norm * offset
@@ -152,7 +161,9 @@ class VoxelBehavior:
                     waypoint_locked = True
                 final_adj_pose_np = target_waypoint2
                 
-                final_mid_pose_np = (cur_pose_np + final_adj_pose_np) / 2.0
+                alpha = 0.8
+                final_mid_pose_np = cur_pose_np * (1-alpha) + final_adj_pose_np * alpha
+                
                 target_waypoint1 = final_mid_pose_np
                     
                 mid_pose = PoseStamped()
@@ -180,6 +191,9 @@ class VoxelBehavior:
         # if self.min_distance_to_cuboid(self.current_target_cluster, cur_pose_np) < 3.0:
         #     self.visited_clusters.append(self.current_target_cluster)
         #     waypoint_locked = False
+        
+        #if random.random() < 0.2:
+        #    waypoint_locked = False
         
         if np.linalg.norm(cur_pose_np - target_waypoint2) < 5.0:
             if sorted_voxel_clusters_by_dist:
