@@ -13,7 +13,7 @@ class RayBehavior:
         self.name = 'Ray-based'
         self.prev_filtered_marker_ids = 0
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper):
+    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
         if queries_labels is None:
             return False
 
@@ -48,9 +48,11 @@ class RayBehavior:
 
         return False
     
-    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict):
+    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
         path_publisher = publisher_dict['path']
         cur_pose_np = point3d_dict['cur_pose']
+        target_waypoint1 = point3d_dict['target1']
+        target_waypoint2 = point3d_dict['target2']
         ray_orig = self.ray_orig_angles[:,:3]
         ray_angles = torch.deg2rad(self.ray_orig_angles[:,3:])
         ray_dir = torch.stack(g3d.spherical_to_cartesian(1,ray_angles[:,0],ray_angles[:,1]),dim=-1)
@@ -99,53 +101,101 @@ class RayBehavior:
             avg_direction = group_directions.mean(dim=0)
             avg_direction = avg_direction / avg_direction.norm()
 
-            group_averages.append((avg_origin, avg_direction))
+            density = len(group['rays'])
+
+            group_averages.append((avg_origin, avg_direction, density))
         
         #sort the angle group averages by the distance from the current pose of robot
-        group_averages = sorted(group_averages, key=lambda pair: np.linalg.norm(pair[0].cpu().numpy() - cur_pose_np))
+        k = 5.0
+        scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
+        best_group = scored_groups[0]
 
-        magnitude = 2.0
+        magnitude = 3.0
 
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        prev_target = cur_pose_np
-        for ii, (avg_origin, avg_direction) in enumerate(group_averages):
-            origin_np = avg_origin.cpu().numpy()
-            direction_np = avg_direction.cpu().numpy()
+        #prev_target = cur_pose_np
+        # for ii, (avg_origin, avg_direction) in enumerate(group_averages):
+        #     origin_np = avg_origin.cpu().numpy()
+        #     direction_np = avg_direction.cpu().numpy()
 
-            origin = origin_np
-            direction = direction_np / np.linalg.norm(direction_np)
+        #     origin = origin_np
+        #     direction = direction_np / np.linalg.norm(direction_np)
 
-            mid_pose_np = (prev_target + origin) / 2.0
-            mid_pose = PoseStamped()
-            mid_pose.header.stamp = self.get_clock().now().to_msg()
-            mid_pose.header.frame_id = 'map'
-            mid_pose.pose.position.x = float(mid_pose_np[0])
-            mid_pose.pose.position.y = float(mid_pose_np[1])
-            mid_pose.pose.position.z = float(mid_pose_np[2])
-            mid_pose.pose.orientation.w = 1.0
-            path.poses.append(mid_pose)
+        #     mid_pose_np = (prev_target + origin) / 2.0
+        #     mid_pose = PoseStamped()
+        #     mid_pose.header.stamp = self.get_clock().now().to_msg()
+        #     mid_pose.header.frame_id = 'map'
+        #     mid_pose.pose.position.x = float(mid_pose_np[0])
+        #     mid_pose.pose.position.y = float(mid_pose_np[1])
+        #     mid_pose.pose.position.z = float(mid_pose_np[2])
+        #     mid_pose.pose.orientation.w = 1.0
+        #     path.poses.append(mid_pose)
 
-            target = origin + direction * magnitude
-            for factor in [0.0, 1.0]:
-                pose = PoseStamped()
-                pose.header.stamp = self.get_clock().now().to_msg()
-                pose.header.frame_id = 'map'
-                pose.pose.position.x = float(origin[0]) * (1 - factor) + float(target[0]) * factor
-                pose.pose.position.y = float(origin[1]) * (1 - factor) + float(target[1]) * factor
-                pose.pose.position.z = float(origin[2]) * (1 - factor) + float(target[2]) * factor
-                pose.pose.orientation.w = 1.0
-                path.poses.append(pose)
+        #     target = origin + direction * magnitude
+        #     for factor in [0.0, 1.0]:
+        #         pose = PoseStamped()
+        #         pose.header.stamp = self.get_clock().now().to_msg()
+        #         pose.header.frame_id = 'map'
+        #         pose.pose.position.x = float(origin[0]) * (1 - factor) + float(target[0]) * factor
+        #         pose.pose.position.y = float(origin[1]) * (1 - factor) + float(target[1]) * factor
+        #         pose.pose.position.z = float(origin[2]) * (1 - factor) + float(target[2]) * factor
+        #         pose.pose.orientation.w = 1.0
+        #         path.poses.append(pose)
             
-            prev_target = target
+        #     prev_target = target
+        best_origin, best_direction = best_group[0], best_group[1]
+        best_origin_np = best_origin.cpu().numpy()
+        best_direction_np = best_direction.cpu().numpy()
+
+        origin = best_origin_np
+        direction = best_direction_np / np.linalg.norm(best_direction_np)
+        alpha = 0.8
+        mid_pose_np = cur_pose_np * (1-alpha) + origin * alpha
+        mid_pose = PoseStamped()
+        mid_pose.header.stamp = self.get_clock().now().to_msg()
+        mid_pose.header.frame_id = 'map'
+        mid_pose.pose.position.x = float(mid_pose_np[0])
+        mid_pose.pose.position.y = float(mid_pose_np[1])
+        mid_pose.pose.position.z = float(mid_pose_np[2])
+        mid_pose.pose.orientation.w = 1.0
+        path.poses.append(mid_pose)
+
+        #if not waypoint_locked:
+        #    target_waypoint1 = origin
+        #    target_waypoint2 = origin + direction*magnitude
+        #    waypoint_locked = True
+        target_waypoint1 = origin
+        target_waypoint2 = origin + direction*magnitude
+            
+        t1_pose = PoseStamped()
+        t1_pose.header.stamp = self.get_clock().now().to_msg()
+        t1_pose.header.frame_id = 'map'
+        t1_pose.pose.position.x = float(target_waypoint1[0])
+        t1_pose.pose.position.y = float(target_waypoint1[1])
+        t1_pose.pose.position.z = float(target_waypoint1[2])
+        t1_pose.pose.orientation.w = 1.0
+        path.poses.append(t1_pose)
+
+        t2_pose = PoseStamped()
+        t2_pose.header.stamp = self.get_clock().now().to_msg()
+        t2_pose.header.frame_id = 'map'
+        t2_pose.pose.position.x = float(target_waypoint2[0])
+        t2_pose.pose.position.y = float(target_waypoint2[1])
+        t2_pose.pose.position.z = float(target_waypoint2[2])
+        t2_pose.pose.orientation.w = 1.0
+        path.poses.append(t2_pose)
         
         path_publisher.publish(path)
 
         self.visualize_filtered_rays(angle_groups, dir_world, orig_world, publisher_dict)
         
-        return waypoint_locked, point3d_dict['target1'], point3d_dict['target2']
+        if np.linalg.norm(cur_pose_np - target_waypoint2) < 4.0:
+            waypoint_locked = False
+
+        return waypoint_locked, target_waypoint1, target_waypoint2
 
     def visualize_filtered_rays(self, angle_groups, dir_world, orig_world, publisher_dict):
         filtered_rays_publisher = publisher_dict['filtered_rays']
