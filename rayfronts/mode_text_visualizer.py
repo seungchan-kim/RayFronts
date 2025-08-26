@@ -1,12 +1,17 @@
 from visualization_msgs.msg import Marker
-from std_msgs.msg import ColorRGBA
+from std_msgs.msg import ColorRGBA, String
 
 class ModeTextVisualizer:
-    def __init__(self, get_clock, mode_text_publisher):
+    def __init__(self, get_clock, mode_text_publisher, node):
        self.get_clock = get_clock
        self.mode_text_publisher = mode_text_publisher
+       self.latest_trajectory_length = None
+       self.traj_length_sub = node.create_subscription(String, "trajectory_length", self.traj_length_callback, 10)
     
-    def modeTextVisualize(self, cur_pose_np, target_object, behavior_mode):
+    def traj_length_callback(self, msg):
+        self.latest_trajectory_length = msg.data
+
+    def modeTextVisualize(self, cur_pose_np, target_objects, behavior_mode):
         mode_text_marker = Marker()
         mode_text_marker.header.frame_id = "map"
         mode_text_marker.header.stamp = self.get_clock().now().to_msg()
@@ -21,10 +26,15 @@ class ModeTextVisualizer:
         mode_text_marker.scale.z = 2.0
         mode_text_marker.color = ColorRGBA(r=1.0,g=1.0,b=1.0,a=1.0)
 
-        if target_object is None:
-            mode_text_marker.text = "No Target Object" + "\nExploration Mode: Frontier-based"
+        mode_text_marker.text = ""
+        if self.latest_trajectory_length is not None:
+            mode_text_marker.text += f"Trajectory length: {self.latest_trajectory_length} m\n"
+
+        if target_objects is None:
+            mode_text_marker.text += "No Target Object" + "\nExploration Mode: Frontier-based"
         else:
-            mode_text_marker.text = "Target Object: " + target_object
+            target_object_string = ", ".join(target_objects)
+            mode_text_marker.text = "Target Object: " + target_object_string
             if behavior_mode == "Frontier-based":
                 mode_text_marker.text += "\nDidn't find any semantic cues"
                 mode_text_marker.text += "\nExploration Mode: Frontier-based"
@@ -34,6 +44,8 @@ class ModeTextVisualizer:
             elif behavior_mode == "Ray-based":
                 mode_text_marker.text += "\nDetected Rays"
                 mode_text_marker.text += "\nExploration Mode: Ray-based"
+            elif behavior_mode == "LVLM-guided":
+                mode_text_marker.text += "\nExploration Mode: LVLM-guided"
         mode_text_marker.lifetime.sec = 0
         self.mode_text_publisher.publish(mode_text_marker)
 

@@ -13,18 +13,18 @@ class RayBehavior:
         self.name = 'Ray-based'
         self.prev_filtered_marker_ids = 0
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
+    def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
         if queries_labels is None:
             return False
 
         if queries_labels['text'] is None:
             return False
         
-        if target_object is None:
+        if len(target_objects) == 0:
             return False
         
-        if queries_labels is not None and queries_labels['text'] is not None and target_object is not None:
-            label_index = queries_labels['text'].index(target_object)
+        if queries_labels is not None and queries_labels['text'] is not None and len(target_objects) > 0:
+            label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
 
             ray_feat = mapper.global_rays_feat
             ray_orig_angles = mapper.global_rays_orig_angles  
@@ -40,7 +40,12 @@ class RayBehavior:
                 if queries_feats is not None:
                     ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
                     threshold = 0.95
-                    indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
+
+                    relevant_scores = ray_scores[:,label_indices]
+                    mask = (relevant_scores > threshold).any(dim=1)
+                    indices = mask.nonzero(as_tuple=True)[0]
+                    #indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
+                    
                     if indices.numel() > 0:
                         self.indices = indices
                         self.ray_orig_angles = ray_orig_angles
@@ -108,7 +113,14 @@ class RayBehavior:
         #sort the angle group averages by the distance from the current pose of robot
         k = 5.0
         scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
-        best_group = scored_groups[0]
+        print("scored_groups", scored_groups)
+
+        if not scored_groups:
+            print("No valid ray groups found (all below MIN_RAYS_PER_GROUP)")
+            best_group = None
+            return waypoint_locked, target_waypoint1, target_waypoint2
+        else:
+            best_group = scored_groups[0]
 
         magnitude = 3.0
 

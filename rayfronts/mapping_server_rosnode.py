@@ -108,7 +108,7 @@ class MappingServer(Node):
 
     self.prev_filtered_marker_ids = 0
 
-    self._target_object = None
+    self._target_objects = []
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
@@ -352,7 +352,7 @@ class MappingServer(Node):
 
       #Behavior Manager selects behavior mode
       self.behavior_manager.mode_select(queries_labels=self._queries_labels,
-                                        target_object=self._target_object,  
+                                        target_objects=self._target_objects,  
                                         queries_feats=self._queries_feats, 
                                         mapper=self.mapper, 
                                         publisher_dict=self.publisher_dict, 
@@ -363,7 +363,7 @@ class MappingServer(Node):
       self.behavior_mode = self.behavior_manager.behavior_mode
 
       #RVIZ visualizer for /mode_text
-      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
+      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_objects, self.behavior_mode)
 
       point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 
@@ -463,14 +463,18 @@ class MappingServer(Node):
       self.status = MappingServer.Status.CLOSED
   
   def target_object_callback(self, msg):
-    data_cleaned = msg.data.strip().lower()
-    if data_cleaned == "":
-      self._target_object = None
+    targets = [t.strip().lower() for t in msg.data.split(",") if t.strip()]
+    #data_cleaned = msg.data.strip().lower()
+    if not targets:
+      self._target_objects = []
     else:
-      self._target_object = data_cleaned
+      self._target_objects = targets
     #print("self._target_object", self._target_object)
-    if self._target_object is not None and self._target_object not in self._queries_labels['text']:
-      self.add_queries(self._target_object)
+    #if self._target_object is not None and self._target_object not in self._queries_labels['text']:
+    #  self.add_queries(self._target_object)
+    for target in self._target_objects:
+      if target not in self._queries_labels['text']:
+        self.add_queries(target)
   
   def lvlm_callback(self, msg: String):
     self.get_logger().info(f"[MappingServerNode] LVLM says: {msg.data}")

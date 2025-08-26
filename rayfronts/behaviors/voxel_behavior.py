@@ -14,28 +14,28 @@ class VoxelBehavior:
         self.get_clock = get_clock
         self.name = 'Voxel-based'
         self.target_voxel_clusters = {}
-        self.target_object = None
+        self.target_objects = None
         self.visited_clusters = []
         self.unvisited_clusters = []
         self.prev_voxel_cluster_ids = 0
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
+    def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
         if queries_labels is None:
             return False
         
         if queries_labels['text'] is None:
             return False
         
-        if target_object is None:
+        if len(target_objects)==0:
             return False
         
-        if queries_labels is not None and queries_labels['text'] is not None and target_object is not None:
-            label_index = queries_labels['text'].index(target_object)
+        if queries_labels is not None and queries_labels['text'] is not None and len(target_objects) > 0:
+            label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
+            #label_index = queries_labels['text'].index(target_object)
             vox_xyz = mapper.global_vox_xyz
             vox_feat = mapper.global_vox_feat
 
-            self.target_object = target_object
-            self.target_voxel_clusters[target_object] = {}
+            self.target_objects = target_objects
 
             if vox_feat is not None and vox_feat.shape[0] > 0:
                 vox_lang_aligned = mapper.encoder.align_spatial_features_with_language(vox_feat.unsqueeze(-1).unsqueeze(-1))
@@ -50,7 +50,11 @@ class VoxelBehavior:
                     vox_scores = compute_cos_sim(queries_feats['text'], vox_lang_aligned, softmax=True)
                     print("vox_scores", torch.round(vox_scores*1000)/1000)
                     threshold = 0.98
-                    indices = (vox_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
+
+                    relevant_scores = vox_scores[:, label_indices]
+                    mask = (relevant_scores > threshold).any(dim=1)
+                    indices = mask.nonzero(as_tuple=True)[0]
+                    #indices = (vox_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
 
                     filtered_vox = vox_xyz[indices]
                     filtered_vox = filtered_vox.round(decimals=3)
@@ -87,10 +91,10 @@ class VoxelBehavior:
                             sx = size[2]
                             sy = size[0]
                             sz = size[1]
-                            self.target_voxel_clusters[target_object][vox_cluster_count] = [cx,cy,cz,sx,sy,sz]
+                            self.target_voxel_clusters[vox_cluster_count] = [cx,cy,cz,sx,sy,sz]
                             vox_cluster_count += 1
                         
-                        all_clusters = self.target_voxel_clusters[self.target_object].items()
+                        all_clusters = self.target_voxel_clusters.items()
                         print("all_clusters: ", all_clusters)
 
                         print("self.visited_clusters: ", self.visited_clusters)
@@ -107,14 +111,14 @@ class VoxelBehavior:
 
     def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
         voxel_bbox_publisher = publisher_dict['voxel_bbox']
-        self.visualize_voxel_cluster_bbox(self.target_object, voxel_bbox_publisher)
+        self.visualize_voxel_cluster_bbox(voxel_bbox_publisher)
 
         cur_pose_np = point3d_dict['cur_pose']
         target_waypoint1 = point3d_dict['target1']
         target_waypoint2 = point3d_dict['target2']
         path_publisher = publisher_dict['path']
 
-        all_clusters = self.target_voxel_clusters[self.target_object].items()
+        all_clusters = self.target_voxel_clusters.items()
         print("execute:")
         print("all_clusters: ", all_clusters)
 
@@ -203,7 +207,7 @@ class VoxelBehavior:
         
         return waypoint_locked, target_waypoint1, target_waypoint2
 
-    def visualize_voxel_cluster_bbox(self, target_object, voxel_bbox_publisher):
+    def visualize_voxel_cluster_bbox(self, voxel_bbox_publisher):
         self.clear_voxel_clusters(voxel_bbox_publisher)
         marker_array = MarkerArray()
         now = self.get_clock().now().to_msg()

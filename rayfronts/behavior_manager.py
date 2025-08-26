@@ -21,15 +21,15 @@ class BehaviorManager:
         self.ray_behavior = RayBehavior(self.get_clock)
         self.frontier_behavior = FrontierBehavior(self.get_clock)
         self.lvlm_guided_behavior = LvlmBehavior(self.get_clock, publisher_dict)
-        self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
-        #self.behaviors = [self.ray_behavior, self.frontier_behavior]
+        #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
+        self.behaviors = [self.ray_behavior, self.frontier_behavior]
         #self.behaviors = [self.ray_gradient_behavior, self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
         #self.behaviors = [self.lvlm_guided_behavior]
 
-    def mode_select(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
+    def mode_select(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
         for behavior in self.behaviors:
-            if behavior.condition_check(queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
+            if behavior.condition_check(queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
                 self.behavior_mode = behavior.name
                 return
     
