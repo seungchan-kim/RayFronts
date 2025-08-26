@@ -6,10 +6,16 @@ class ModeTextVisualizer:
        self.get_clock = get_clock
        self.mode_text_publisher = mode_text_publisher
        self.latest_trajectory_length = None
+       self.latest_success_count = 0
        self.traj_length_sub = node.create_subscription(String, "trajectory_length", self.traj_length_callback, 10)
-    
+       self.success_count_sub = node.create_subscription(String, "success_count", self.success_count_callback, 10)
+
+
     def traj_length_callback(self, msg):
         self.latest_trajectory_length = msg.data
+
+    def success_count_callback(self, msg):
+        self.latest_success_count = msg.data
 
     def modeTextVisualize(self, cur_pose_np, target_objects, behavior_mode):
         mode_text_marker = Marker()
@@ -21,20 +27,22 @@ class ModeTextVisualizer:
         mode_text_marker.action = Marker.ADD
         mode_text_marker.pose.position.x = cur_pose_np[0]
         mode_text_marker.pose.position.y = cur_pose_np[1]
-        mode_text_marker.pose.position.z = cur_pose_np[2] + 10
+        mode_text_marker.pose.position.z = cur_pose_np[2] + 20
         mode_text_marker.pose.orientation.w = 1.0
         mode_text_marker.scale.z = 2.0
         mode_text_marker.color = ColorRGBA(r=1.0,g=1.0,b=1.0,a=1.0)
 
         mode_text_marker.text = ""
         if self.latest_trajectory_length is not None:
+            print("line 31:", self.latest_trajectory_length)
             mode_text_marker.text += f"Trajectory length: {self.latest_trajectory_length} m\n"
+        mode_text_marker.text += f"Number of reached objects: {self.latest_success_count}\n\n"
 
-        if target_objects is None:
+        if len(target_objects) == 0:
             mode_text_marker.text += "No Target Object" + "\nExploration Mode: Frontier-based"
         else:
             target_object_string = ", ".join(target_objects)
-            mode_text_marker.text = "Target Object: " + target_object_string
+            mode_text_marker.text += "Target Object: " + target_object_string
             if behavior_mode == "Frontier-based":
                 mode_text_marker.text += "\nDidn't find any semantic cues"
                 mode_text_marker.text += "\nExploration Mode: Frontier-based"
