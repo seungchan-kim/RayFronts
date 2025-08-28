@@ -60,7 +60,7 @@
     }
   },
   {
-    "class": "busstop",
+    "class": "bus stop",
     "bbox_world": {
       "center_xyz_m": [
         45.2,
@@ -75,7 +75,7 @@
     }
   },
   {
-    "class": "busstop",
+    "class": "bus stop",
     "bbox_world": {
       "center_xyz_m": [
         165.4,
@@ -90,7 +90,7 @@
     }
   },
   {
-    "class": "busstop",
+    "class": "bus stop",
     "bbox_world": {
       "center_xyz_m": [
         187.5,
