@@ -25,8 +25,8 @@ class FrontierBehavior:
         if mapper.frontiers is not None:
             transformed_frontiers = torch.stack([mapper.frontiers[:,2],-mapper.frontiers[:,0], -mapper.frontiers[:,1]], dim=1)
 
-            #filter out frontier points that are under the height of 1.5m
-            transformed_frontiers = transformed_frontiers[transformed_frontiers[:,2] > 1.5]
+            #filter out frontier points that are under the height of 4.0m
+            transformed_frontiers = transformed_frontiers[transformed_frontiers[:,2] > 4.0]
 
             #DBSCAN clustering for frontier-points
             frontiers_cpu = transformed_frontiers.detach().cpu().numpy()
@@ -41,7 +41,7 @@ class FrontierBehavior:
                 centroid_torch = torch.from_numpy(centroid)
                 centroid_torch = centroid_torch.to(transformed_frontiers.device, dtype = transformed_frontiers.dtype)
 
-                if centroid_torch[2] > 2.0:
+                if centroid_torch[2] > 4.0:
                     viewpoints.append(centroid_torch)
             viewpoints = torch.stack(viewpoints)
 
@@ -63,7 +63,10 @@ class FrontierBehavior:
             else:
                 scores = distances
 
-            best_idx = torch.argsort(scores)[0]
+            top_n = 5
+            num_candidates = min(top_n, viewpoints.shape[0])
+            top_indices = torch.argsort(scores)[:num_candidates]
+            best_idx = top_indices[torch.randint(0, num_candidates, (1,))]
             best_cent = viewpoints[best_idx]
 
             path = Path()
