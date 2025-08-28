@@ -135,7 +135,7 @@
     }
   },
   {
-    "class": "ATV",
+    "class": "all-terrain vehicle",
     "bbox_world": {
       "center_xyz_m": [
         30.0,
@@ -150,7 +150,7 @@
     }
   },
   {
-    "class": "ATV",
+    "class": "all-terrain vehicle",
     "bbox_world": {
       "center_xyz_m": [
         75.0,
@@ -165,7 +165,7 @@
     }
   },
   {
-    "class": "ATV",
+    "class": "all-terrain vehicle",
     "bbox_world": {
       "center_xyz_m": [
         98.0,
@@ -180,7 +180,7 @@
     }
   },
   {
-    "class": "ATV",
+    "class": "all-terrain vehicle",
     "bbox_world": {
       "center_xyz_m": [
         56.0,
