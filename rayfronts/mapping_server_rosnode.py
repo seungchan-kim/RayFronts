@@ -90,11 +90,13 @@ class MappingServer(Node):
     self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
 
     #self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
-    #self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher = self.mode_text_publisher)
+    #self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher = self.mode_text_publisher, node=self)
 
     self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
 
     self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
+
+    self.subscriber_dict = {}
 
     self.waypoint_locked = False
     self.target_waypoint = None
@@ -104,8 +106,8 @@ class MappingServer(Node):
 
     self.prev_filtered_marker_ids = 0
 
-    self._target_object = None
-    self.create_subscription(String, '/input_text', self.target_object_callback, 10)
+    self._target_objects = []
+    self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -346,7 +348,7 @@ class MappingServer(Node):
       map_t1 = time.time()
 
       #behavior manager selects mode
-      self.behavior_manager.mode_select(queries_labels=self._queries_labels,target_object = self._target_object, queries_feats = self._queries_feats, mapper=self.mapper)
+      self.behavior_manager.mode_select(queries_labels=self._queries_labels,target_objects = self._target_objects, queries_feats = self._queries_feats, mapper=self.mapper, publisher_dict=self.publisher_dict, subscriber=self.subscriber_dict)
 
       if self.behavior_mode != self.behavior_manager.behavior_mode:
           self.mode_switch_trigger()
@@ -354,11 +356,11 @@ class MappingServer(Node):
       self.behavior_mode = self.behavior_manager.behavior_mode
 
       #RVIZ visualizer for /mode_text
-      #self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
+      #self.modeTextVisualize(cur_pose_np, self._target_object, self.behavior_mode)
 
       point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 
-      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict)
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict)
 
       if self.vis is not None:
         if i % self.cfg.vis.input_period == 0:
@@ -454,14 +456,14 @@ class MappingServer(Node):
       self.status = MappingServer.Status.CLOSED
 
   def target_object_callback(self, msg):
-  	data_cleaned = msg.data.strip().lower()
-  	if data_cleaned == "":
-  		self._target_object = None
+    targets = [t.strip().lower() for t in msg.daa.split(",") if t.strip()]
+    if not targets:
+  		self._target_objects = []
   	else:
-  		self._target_object = data_cleaned
-  	print("self._target_object", self._target_object)
-  	if self._target_object is not None and self._target_object not in self._queries_labels['text']:
-  		self.add_queries(self._target_object)
+  		self._target_objects = targets
+  	for target in self._target_objects:
+        if target not in self._queries_labels['text']:
+            self.add_queries(target)
   
   def mode_switch_trigger(self):
   	self.waypoint_locked = False

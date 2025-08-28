@@ -12,10 +12,10 @@ class FrontierBehavior:
         self.get_clock = get_clock
         self.name = 'Frontier-based'
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper):
+    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
         return True
 
-    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict):
+    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
         cur_pose_np = point3d_dict['cur_pose']
         target_waypoint = point3d_dict['target1']
         target_waypoint2 = point3d_dict['target2']

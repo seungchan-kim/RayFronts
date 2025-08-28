@@ -4,7 +4,7 @@ import numpy as np
 
 from rayfronts.behaviors.frontier_behavior import FrontierBehavior
 #from rayfronts.behaviors.voxel_behavior import VoxelBehavior
-#from rayfronts.behaviors.ray_behavior import RayBehavior
+from rayfronts.behaviors.ray_behavior import RayBehavior
 from rayfronts.utils import compute_cos_sim
 
 from visualization_msgs.msg import Marker, MarkerArray
@@ -16,19 +16,19 @@ class BehaviorManager:
         self.behavior_mode = 'Frontier-based'
         self.get_clock = get_clock
         #self.voxel_behavior = VoxelBehavior(self.get_clock)
-        #self.ray_behavior = RayBehavior(self.get_clock)
+        self.ray_behavior = RayBehavior(self.get_clock)
         self.frontier_behavior = FrontierBehavior(self.get_clock)
-        self.behaviors = [self.frontier_behavior]
+        self.behaviors = [self.ray_behavior, self.frontier_behavior]
 
-    def mode_select(self, queries_labels, target_object, queries_feats, mapper):
+    def mode_select(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
         for behavior in self.behaviors:
-            if behavior.condition_check(queries_labels, target_object, queries_feats, mapper):
+            if behavior.condition_check(queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
                 self.behavior_mode = behavior.name
                 return
 
-    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict):
+    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
         if behavior_mode == 'Frontier-based':
-            wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
+            wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
 
         #elif behavior_mode == 'Voxel-based':
@@ -36,6 +36,6 @@ class BehaviorManager:
         #    return wp_locked, tw1, tw2
 
         
-        #elif behavior_mode == 'Ray-based':
-        #    wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
-        #    return wp_locked, tw1, tw2
+        elif behavior_mode == 'Ray-based':
+            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
+            return wp_locked, tw1, tw2
