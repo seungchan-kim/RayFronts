@@ -70,6 +70,20 @@ class RayBehavior:
 
         xy_dirs_np = xy_dirs.cpu().numpy()
         xy_dirs_np_normed = xy_dirs_np / np.linalg.norm(xy_dirs_np, axis=1, keepdims=True)
+
+        #filter rays that are behind the robot XY
+        cur_xy = cur_pose_np[:2]
+        orig_xy = orig_world[:,:2]
+        dir_xy = xy_dirs_np_normed
+
+        ray_target_xy = orig_xy.cpu().numpy() + dir_xy
+        to_ray_target = ray_target_xy - cur_xy
+
+        dot = np.einsum('ij,ij->i',dir_xy,to_ray_target)
+        valid_mask = dot > 0
+
+        xy_dirs_np_normed = xy_dirs_np_normed[valid_mask]
+
         angle_groups = []
 
         #45 degree as a bin for grouping rays
@@ -93,7 +107,7 @@ class RayBehavior:
                     'indices':[i]
                     })
         
-        MIN_RAYS_PER_GROUP = 2
+        MIN_RAYS_PER_GROUP = 1
         angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
 
         group_averages = []
@@ -122,7 +136,7 @@ class RayBehavior:
         else:
             best_group = scored_groups[0]
 
-        magnitude = 3.0
+        magnitude = 6.0
 
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
@@ -173,14 +187,14 @@ class RayBehavior:
         mid_pose.pose.position.y = float(mid_pose_np[1])
         mid_pose.pose.position.z = float(mid_pose_np[2])
         mid_pose.pose.orientation.w = 1.0
-        path.poses.append(mid_pose)
+        #path.poses.append(mid_pose)
 
         #if not waypoint_locked:
         #    target_waypoint1 = origin
         #    target_waypoint2 = origin + direction*magnitude
         #    waypoint_locked = True
-        target_waypoint1 = origin
-        target_waypoint2 = origin + direction*magnitude
+        target_waypoint1 = origin + direction*magnitude
+        target_waypoint2 = origin + direction*magnitude*2
             
         t1_pose = PoseStamped()
         t1_pose.header.stamp = self.get_clock().now().to_msg()

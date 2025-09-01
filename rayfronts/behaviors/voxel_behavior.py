@@ -156,7 +156,7 @@ class VoxelBehavior:
                 continue
             t_hit = tmin if tmin > 0 else tmax
             surface_point = cur_pose_np + dir_norm * t_hit
-            offset = 2.0
+            offset = 1.0
             adjacent_np = surface_point - dir_norm * offset
 
             if i == 0:
@@ -199,7 +199,7 @@ class VoxelBehavior:
         #if random.random() < 0.2:
         #    waypoint_locked = False
         
-        if np.linalg.norm(cur_pose_np - target_waypoint2) < 5.0:
+        if np.linalg.norm(cur_pose_np - target_waypoint2) < 3.0:
             if sorted_voxel_clusters_by_dist:
                 current_close_cluster = np.array(sorted_voxel_clusters_by_dist[0][1])
                 self.visited_clusters.append(current_close_cluster)

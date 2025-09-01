@@ -7,15 +7,16 @@ from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 
 class LvlmBehavior:
-    def __init__(self, get_clock, publisher_dict):
+    def __init__(self, get_clock, publisher_dict, mapping_server_rosnode):
         self.get_clock = get_clock
         self.name = 'LVLM-guided'
         self.lvlm_trigger_pub = publisher_dict['lvlm_trigger']
         self.guiding_objects = []
         self.last_request_time = None
-        self.request_interval = 60.0
+        self.request_interval = 20.0
+        self.mapping_server_rosnode = mapping_server_rosnode
 
-    def set_guiding_objects(self, objects_string: str, mapping_server_rosnode):
+    def set_guiding_objects(self, objects_string: str):
         raw_objects = [o.strip().lower() for o in objects_string.split(",")]
 
         cleaned_objects = []
@@ -31,16 +32,24 @@ class LvlmBehavior:
             if obj not in seen and obj != "":
                 cleaned_objects.append(obj)
                 seen.add(obj)
-
         self.guiding_objects = cleaned_objects
+        print("self.guiding_objects", self.guiding_objects)
         print(f"[LvlmBehavior] Updated objects: {self.guiding_objects}")
 
-        mapping_server_rosnode.add_queries(self.guiding_objects)
+        # if cleaned_objects != self.guiding_objects:
+        #     mapping_server_rosnode.delete_queries(self.guiding_objects)
+        #     self.guiding_objects = cleaned_objects
+            
+        #     mapping_server_rosnode.add_queries(self.guiding_objects)
 
-    def condition_check(self, queries_labels, target_object, queries_feats, mapper, publisher_dict, subscriber_dict):
-        if queries_labels is None or queries_labels['text'] is None:
+    def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
+        self.mapping_server_rosnode.add_queries(self.guiding_objects)
+        objects_to_delete = [obj for i, obj in enumerate(self.mapping_server_rosnode._queries_labels['text']) if obj not in self.mapping_server_rosnode._target_objects and obj not in self.mapping_server_rosnode._background_objects and obj not in self.guiding_objects]
+        self.mapping_server_rosnode.delete_queries(objects_to_delete)
+
+        if self.mapping_server_rosnode._queries_labels is None or self.mapping_server_rosnode._queries_labels['text'] is None:
             return False
-        if target_object is None:
+        if self.mapping_server_rosnode._target_objects is None:
             return False
         
         now = self.get_clock().now().nanoseconds/1e9
@@ -54,9 +63,9 @@ class LvlmBehavior:
             return False
         
         if len(self.guiding_objects) >= 1:
-            print("queries_labels['text']", queries_labels['text'])
+            print("queries_labels['text']", self.mapping_server_rosnode._queries_labels['text'])
             print("self.guiding_objects", self.guiding_objects)
-            label_indices = [queries_labels['text'].index(guiding_object) for guiding_object in self.guiding_objects]
+            label_indices = [self.mapping_server_rosnode._queries_labels['text'].index(guiding_object) for guiding_object in self.guiding_objects]
             print("indexes", label_indices)
             ray_feat = mapper.global_rays_feat
             ray_orig_angles = mapper.global_rays_orig_angles
@@ -97,7 +106,7 @@ class LvlmBehavior:
         # xy_dirs_np_normed = xy_dirs_np / np.linalg.norm(xy_dirs_np, axis=1, keepdims=True)
 
         mean_origin = torch.mean(fo, dim=0)
-        mean_direction = torch.mean(fd, dim=1)
+        mean_direction = torch.mean(fd, dim=0)
 
         origin_np = mean_origin.cpu().numpy()
         direction_np = mean_direction.cpu().numpy()
