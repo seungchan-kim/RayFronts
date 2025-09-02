@@ -14,17 +14,21 @@ from std_msgs.msg import ColorRGBA
 import scipy.ndimage
 
 class BehaviorManager:
-    def __init__(self, get_clock, publisher_dict):
+    def __init__(self, get_clock, publisher_dict, node):
         self.behavior_mode = 'Frontier-based'
         self.get_clock = get_clock
         self.voxel_behavior = VoxelBehavior(self.get_clock)
         self.ray_behavior = RayBehavior(self.get_clock)
         self.frontier_behavior = FrontierBehavior(self.get_clock)
-        self.lvlm_guided_behavior = LvlmBehavior(self.get_clock, publisher_dict)
+        self.lvlm_guided_behavior = LvlmBehavior(self.get_clock, publisher_dict, node)
         #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
-        self.behaviors = [self.ray_behavior, self.frontier_behavior]
+        #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.frontier_behavior]
+        self.behaviors = [self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
+        #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
+        #self.behaviors = [self.ray_behavior, self.frontier_behavior]
         #self.behaviors = [self.ray_gradient_behavior, self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
+        #self.behaviors = [self.frontier_behavior]
         #self.behaviors = [self.lvlm_guided_behavior]
 
     def mode_select(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):

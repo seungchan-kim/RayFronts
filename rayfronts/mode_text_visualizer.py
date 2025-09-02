@@ -5,10 +5,15 @@ class ModeTextVisualizer:
     def __init__(self, get_clock, mode_text_publisher, node):
        self.get_clock = get_clock
        self.mode_text_publisher = mode_text_publisher
-       self.latest_trajectory_length = None
-       self.latest_success_count = 0
+       self.latest_trajectory_length = '0.0'
+       self.latest_success_count = '0'
+       self.latest_progress = '0.0'
+       self.latest_ppl = '0.0'
        self.traj_length_sub = node.create_subscription(String, "trajectory_length", self.traj_length_callback, 10)
        self.success_count_sub = node.create_subscription(String, "success_count", self.success_count_callback, 10)
+       self.progress_sub = node.create_subscription(String, "progress", self.progress_callback, 10)
+       self.ppl_sub = node.create_subscription(String, "ppl", self.ppl_callback, 10)
+       self.node = node
 
 
     def traj_length_callback(self, msg):
@@ -16,6 +21,12 @@ class ModeTextVisualizer:
 
     def success_count_callback(self, msg):
         self.latest_success_count = msg.data
+
+    def progress_callback(self, msg):
+        self.latest_progress = msg.data
+    
+    def ppl_callback(self, msg):
+        self.latest_ppl = msg.data
 
     def modeTextVisualize(self, cur_pose_np, target_objects, behavior_mode):
         mode_text_marker = Marker()
@@ -33,10 +44,10 @@ class ModeTextVisualizer:
         mode_text_marker.color = ColorRGBA(r=1.0,g=1.0,b=1.0,a=1.0)
 
         mode_text_marker.text = ""
-        if self.latest_trajectory_length is not None:
-            print("line 31:", self.latest_trajectory_length)
-            mode_text_marker.text += f"Trajectory length: {self.latest_trajectory_length} m\n"
-        mode_text_marker.text += f"Number of reached objects: {self.latest_success_count}\n\n"
+        mode_text_marker.text += f"Trajectory length: {self.latest_trajectory_length} m\n"
+        mode_text_marker.text += f"Number of reached objects: {self.latest_success_count}\n"
+        mode_text_marker.text += f"Progress: {self.latest_progress}\n"
+        mode_text_marker.text += f"PPL: {self.latest_ppl}\n\n"
 
         if len(target_objects) == 0:
             mode_text_marker.text += "No Target Object" + "\nExploration Mode: Frontier-based"
@@ -54,6 +65,7 @@ class ModeTextVisualizer:
                 mode_text_marker.text += "\nExploration Mode: Ray-based"
             elif behavior_mode == "LVLM-guided":
                 mode_text_marker.text += "\nExploration Mode: LVLM-guided"
+                mode_text_marker.text += "\nGuiding Objects: " + ', '.join(self.node.behavior_manager.lvlm_guided_behavior.guiding_objects)
         mode_text_marker.lifetime.sec = 0
         self.mode_text_publisher.publish(mode_text_marker)
 

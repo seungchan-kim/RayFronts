@@ -26,27 +26,14 @@ import torch
 import torchvision
 import numpy as np
 import hydra
-import struct
 
 from rayfronts import datasets, visualizers, image_encoders, mapping, utils
-from rayfronts.behavior_manager import BehaviorManager
-from rayfronts.mode_text_visualizer import ModeTextVisualizer
-
-import rclpy
-from rclpy.node import Node
-import std_msgs.msg
-from std_msgs.msg import String, Bool
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
-import scipy.ndimage
-from sensor_msgs.msg import PointCloud2, PointField, Image
-from std_msgs.msg import Header, ColorRGBA
-from sensor_msgs_py import point_cloud2
-from visualization_msgs.msg import Marker, MarkerArray
-from geometry_msgs.msg import Point
-from rayfronts import geometry3d as g3d
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
 from rayfronts.utils import compute_cos_sim
-
 
 logger = logging.getLogger(__name__)
 
@@ -79,37 +66,8 @@ class MappingServer(Node):
     self.cfg = cfg
     self.dataset: datasets.PosedRgbdDataset = \
       hydra.utils.instantiate(cfg.dataset)
-
-    self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
-    self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
-
-    self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
-    self.ray_gradients_publisher = self.create_publisher(MarkerArray, '/ray_gradients', 10)
-
-    self.mode_text_publisher = self.create_publisher(Marker, '/mode_text', 10)
-    self.mode_text_visualizer = ModeTextVisualizer(get_clock=self.get_clock, mode_text_publisher=self.mode_text_publisher, node=self)
-
-    self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
-    self.lvlm_trigger_pub = self.create_publisher(Bool, "/lvlm_trigger", 10)
-
-    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher, 'lvlm_trigger': self.lvlm_trigger_pub}
     
-    self.lvlm_sub = self.create_subscription(String, '/lvlm_output', self.lvlm_callback, 10)
-    self.subscriber_dict = {}
-
-    self.behavior_manager = BehaviorManager(get_clock=self.get_clock, publisher_dict=self.publisher_dict, node=self)
-
-
-    self.waypoint_locked = False
-    self.target_waypoint = None
-    self.target_waypoint2 = None
-
-    self.behavior_mode = 'Frontier-based' #Frontier-based, Ray-based
-
-    self.prev_filtered_marker_ids = 0
-
-    self._background_objects = []
-    self._target_objects = []
+    self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
@@ -185,7 +143,6 @@ class MappingServer(Node):
                               k, v in cmap_queries.items()}
         else:
           queries = [l.strip() for l in f.readlines()]
-        self._background_objects = queries
         self.add_queries(queries)
 
     self.messaging_service = None
@@ -278,26 +235,6 @@ class MappingServer(Node):
       self._queries_labels = None
       self._queries_feats = None
       self._queries_updated = False
-  
-  def delete_queries(self, previous_guiding_objects: List[str]):
-    print("self._queries_labels", self._queries_labels)
-    print("self._queries_feats", self._queries_feats['text'].shape)
-
-    valid_guiding_objects = [guide_object for guide_object in previous_guiding_objects
-                              if guide_object not in self._background_objects 
-                              and guide_object not in self._target_objects]
-
-    indices_to_delete = [self._queries_labels['text'].index(guide_object) for guide_object in valid_guiding_objects 
-                         if guide_object in self._queries_labels['text']]
-    
-    if not indices_to_delete:
-      return
-    
-    self._queries_labels['text'] = [obj for i, obj in enumerate(self._queries_labels['text']) if i not in indices_to_delete]
-
-    mask = torch.ones(len(self._queries_feats['text']), dtype=torch.bool)
-    mask[indices_to_delete] = False
-    self._queries_feats['text'] = self._queries_feats['text'][mask]
 
   def run_queries(self):
     with self._query_lock:
@@ -349,8 +286,6 @@ class MappingServer(Node):
       cur_pose_np = np.array([float(pose_4x4_np[0][2, 3]),
                               float(-pose_4x4_np[0][0, 3]),
                               float(-pose_4x4_np[0][1, 3])])
-
-
       kwargs = dict()
       if "confidence_map" in batch.keys():
         kwargs["conf_map"] = batch["confidence_map"].cuda()
@@ -369,28 +304,66 @@ class MappingServer(Node):
           self.vis.log_depth_img(depth_img.cpu()[-1].squeeze())
 
       map_t0 = time.time()
-      r = self.mapper.process_posed_rgbd(rgb_img, depth_img, pose_4x4, **kwargs)
+      r = self.mapper.process_posed_rgbd_vlfm(rgb_img, depth_img, pose_4x4, **kwargs)
       map_t1 = time.time()
 
-      #Behavior Manager selects behavior mode
-      self.behavior_manager.mode_select(queries_labels=self._queries_labels,
-                                        target_objects=self._target_objects,  
-                                        queries_feats=self._queries_feats, 
-                                        mapper=self.mapper, 
-                                        publisher_dict=self.publisher_dict, 
-                                        subscriber_dict=self.subscriber_dict)
-      
-      if self.behavior_mode != self.behavior_manager.behavior_mode:
-        self.mode_switch_trigger()
-      self.behavior_mode = self.behavior_manager.behavior_mode
+      #VLFM Planner
+      if self._queries_labels is not None and self._queries_labels['text'] is not None and len(self._target_objects) > 0:
+        indices = [self._queries_labels['text'].index(target_object) for target_object in self._target_objects]
+        ray_feat = self.mapper.global_rays_feat
+        if ray_feat is not None and ray_feat.shape[0] > 0:
+          ray_lang_aligned = self.mapper.encoder.align_spatiala_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
+          if ray_lang_aligned.ndim == 4:
+            ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
+          if ray_lang_aligned.ndim == 2:
+            ray_lang_aligned = ray_lang_aligned
+          if ray_lang_aligned.ndim == 1:
+            ray_lang_aligned = ray_lang_aligned.unsqueeze(0)
+          
+          if self._queries_feats is not None:
+            ray_scores = compute_cos_sim(self._queries_feats['text'], ray_lang_aligned, softmax=True)
+            relevant_scores = ray_scores[:,indices]
+            _, flat_idx = torch.max(relevant_scores.view(-1), dim=0)
+            ray_idx = flat_idx // relevant_scores.shape[1]
 
-      #RVIZ visualizer for /mode_text
-      self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_objects, self.behavior_mode)
+            ray_orig = self.mapper.ray_orig_angles[:,:3]
+            selected_orig = ray_orig[ray_idx]
 
-      point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
+            orig_world = torch.stack([selected_orig[:,2],-selected_orig[:,0],-selected_orig[:,1]],dim=1)
 
-      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict) 
-      
+            path = Path()
+            path.header.stamp = self.get_clock().now().to_msg()
+            path.header.frame_id = 'map'
+
+            origin = orig_world.cpu().numpy()
+            direction = origin - cur_pose_np
+            direction_norm = direction / np.linalg.norm(direction)
+
+            alpha=0.8
+            mid_pose_np = cur_pose_np * (1-alpha) + origin * alpha
+            mid_pose = PoseStamped()
+            mid_pose.header.stamp = self.get_clock().now().to_msg()
+            mid_pose.header.frame_id = 'map'
+            mid_pose.pose.position.x = float(mid_pose_np[0])
+            mid_pose.pose.position.y = float(mid_pose_np[1])
+            mid_pose.pose.position.z = float(mid_pose_np[2])
+            mid_pose.pose.orientation.w = 1.0
+
+            target_waypoint1 = origin
+
+            t1_pose = PoseStamped()
+            t1_pose.header.stamp = self.get_clock().now().to_msg()
+            t1_pose.header.frame_id = 'map'
+            t1_pose.pose.position.x = float(target_waypoint1[0])
+            t1_pose.pose.position.y = float(target_waypoint1[1])
+            t1_pose.pose.position.z = float(target_waypoint1[2])
+            t1_pose.pose.orientation.w = 1.0
+            path.poses.append(t1_pose)
+
+            self.path_publisher.publish(path)
+
+
+
       if self.vis is not None:
         if i % self.cfg.vis.input_period == 0:
           self.mapper.vis_update(**r)
@@ -486,85 +459,13 @@ class MappingServer(Node):
   
   def target_object_callback(self, msg):
     targets = [t.strip().lower() for t in msg.data.split(",") if t.strip()]
-    #data_cleaned = msg.data.strip().lower()
     if not targets:
       self._target_objects = []
     else:
       self._target_objects = targets
-    #if self._target_object is not None and self._target_object not in self._queries_labels['text']:
-    #  self.add_queries(self._target_object)
     for target in self._target_objects:
       if target not in self._queries_labels['text']:
         self.add_queries(target)
-  
-  def lvlm_callback(self, msg: String):
-    self.get_logger().info(f"[MappingServerNode] LVLM says: {msg.data}")
-    self.behavior_manager.lvlm_guided_behavior.set_guiding_objects(msg.data)
-  
-  def mode_switch_trigger(self):
-    self.waypoint_locked = False
-    self.target_waypoint = None
-    self.target_waypoint2 = None
-
-  def clear_filtered_rays(self):
-    if self.prev_filtered_marker_ids > 0:
-      clear_marker_array = MarkerArray()
-      for i in range(self.prev_filtered_marker_ids):
-        clear_marker = Marker()
-        clear_marker.header.frame_id = "map"
-        clear_marker.header.stamp = self.get_clock().now().to_msg()
-        clear_marker.ns = "arrows"
-        clear_marker.id = i  # IDs must match those previously used
-        clear_marker.action = Marker.DELETE
-        clear_marker_array.markers.append(clear_marker)
-      self.filtered_rays_publisher.publish(clear_marker_array)
-
-  def create_pointcloud2_msg(self, xyz):
-    if isinstance(xyz, torch.Tensor):
-      xyz = xyz.detach().cpu().numpy()
-    elif isinstance(xyz, np.ndarray):
-      xyz = xyz
-    else:
-      raise TypeError(f"Expected torch.Tensor or numpy.ndarray, got {type(xyz)}")
-    header = Header()
-    header.stamp = self.get_clock().now().to_msg()
-    header.frame_id = 'map'
-    fields =  [PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
-               PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
-               PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1)]
-    points = []
-    for i in range(xyz.shape[0]):
-      x,y,z = xyz[i]
-      points.append([x,y,z])
-    return point_cloud2.create_cloud(header, fields, points)
-
-
-  def create_colored_pointcloud_msg(self, xyz_tensor, rgb_tensor):
-    xyz = xyz_tensor.cpu().numpy()
-    rgb = (rgb_tensor*255).cpu().numpy()
-    assert xyz.shape[0] == rgb.shape[0]
-
-    def pack_rgb(r,g,b):
-      rgb_int = (int(r) << 16)| (int(g) << 8) | int (b)
-      return struct.unpack('f', struct.pack('I', rgb_int))[0]
-    
-    points = []
-    for i in range(xyz.shape[0]):
-      xo,yo,zo = xyz[i]
-      x,y,z = zo,-xo,-yo
-      r,g,b = rgb[i]
-      rgb_packed = pack_rgb(r,g,b)
-      points.append([x,y,z,rgb_packed])
-    
-    fields = [PointField(name='x',offset=0,datatype=PointField.FLOAT32, count=1), 
-              PointField(name='y',offset=4,datatype=PointField.FLOAT32, count=1), 
-              PointField(name='z',offset=8,datatype=PointField.FLOAT32, count=1), 
-              PointField(name='rgb',offset=12,datatype=PointField.FLOAT32, count=1)]
-    header = Header()
-    header.stamp = self.get_clock().now().to_msg()
-    header.frame_id = 'map'
-    return point_cloud2.create_cloud(header,fields, points)
-
 
 def signal_handler(mapping_server: MappingServer, sig, frame):
   with mapping_server._status_lock:
@@ -602,7 +503,6 @@ def main(cfg = None):
     logger.info("Shutdown before initializing completed.")
     return
   
-
   spin_thread = threading.Thread(target=rclpy.spin, args=(server,), daemon=True)
   spin_thread.start()
 

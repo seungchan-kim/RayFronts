@@ -509,6 +509,156 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
       if self.infer_direction:
         self.compute_inferred_directions()
 
+    return update_info#self.global_vox_xyz, self.global_vox_rgb, self.global_vox_feat, self.global_rays_orig_angles, self.global_rays_feat
+
+  def process_posed_rgbd_vlfm(self,
+                         rgb_img: torch.FloatTensor,
+                         depth_img: torch.FloatTensor,
+                         pose_4x4: torch.FloatTensor,
+                         conf_map: torch.FloatTensor = None) -> dict:
+    update_info = dict()
+
+    # TODO: Decouple ray resolution from depth resolution. Would be beneficial
+    # to project a smaller number of rays at lower resolution to reduce
+    # object semantics leaking at the boundaries.
+
+    r = g3d.depth_to_sparse_occupancy_voxels(
+      depth_img, pose_4x4, self.intrinsics_3x3, self.vox_size, conf_map,
+      max_num_pts = self.max_pts_per_frame,
+      max_num_empty_pts = self.max_empty_pts_per_frame,
+      max_num_dirs = self.max_dirs_per_frame,
+      max_depth_sensing = self.max_depth_sensing,
+      occ_thickness=self.occ_thickness,
+      return_pc=True, return_dirs= not self.global_encoding,
+      dirs_erosion=self.ray_erosion,
+    )
+    vox_xyz,vox_occ,pc_xyz,selected_pc_ind, origs, dirs, selected_dir_ind = r
+    # if not self.global_encoding:
+    #   vox_xyz, vox_occ, pc_xyz, selected_pc_ind, \
+    #     origs, dirs, selected_dir_ind = r
+    # else:
+    #   vox_xyz, vox_occ, pc_xyz, selected_pc_ind = r
+    #   origs = torch.zeros(pose_4x4.shape[0], 1, 3,
+    #                       dtype=torch.float, device=self.device)
+    #   dirs = torch.zeros(pose_4x4.shape[0], 1, 3,
+    #                      dtype=torch.float, device=self.device)
+    #   dirs[..., -1] = 1
+    #   origs = g3d.transform_points(origs, pose_4x4).reshape(-1, 3)
+    #   dirs = g3d.transform_points(dirs, pose_4x4).reshape(-1, 3) - origs
+
+    vox_xyz, vox_occ = self._clip_pc(vox_xyz, vox_occ)
+    pc_xyz, selected_pc_ind = self._clip_pc(
+      pc_xyz, selected_pc_ind.unsqueeze(-1))
+    selected_pc_ind = selected_pc_ind.squeeze(-1)
+
+    B, _, rH, rW = rgb_img.shape
+    B, _, dH, dW = depth_img.shape
+
+    if rH != dH or rW != dW:
+      pts_rgb = torch.nn.functional.interpolate(
+        rgb_img,
+        size=(dH, dW),
+        mode=self.interp_mode,
+        antialias=self.interp_mode in ["bilinear", "bicubic"])
+    else:
+      pts_rgb = rgb_img
+
+    pts_rgb = pts_rgb.permute(0, 2, 3, 1).reshape(-1, 3)[selected_pc_ind]
+
+    if not self.global_encoding:
+      feat_img = self._compute_proj_resize_feat_map(rgb_img, dH, dW)
+      update_info["feat_img"] = feat_img
+
+      feat_img_flat = feat_img.permute(0, 2, 3, 1).reshape(-1,
+                                                           feat_img.shape[1])
+
+      dirs_feat = feat_img_flat[selected_dir_ind]
+      pts_feat = feat_img_flat[selected_pc_ind]
+      del feat_img_flat
+
+    else:
+      feat_vec = self.encoder.encode_image_to_vector(rgb_img)
+      feat_vec = torch.tile(feat_vec, (origs.shape[0],1))
+      dirs_feat = feat_vec
+      pts_feat = feat_vec[selected_pc_ind // (dH*dW)]
+
+    N = pts_rgb.shape[0]
+    pts_rgb_feat_cnt = torch.cat(
+      (pts_rgb, pts_feat, torch.ones((N, 1), device=self.device)), dim=-1)
+    # [0, 1] to [-1, occ_observ_weight]
+    vox_occ = vox_occ*self.occ_observ_weight-1
+
+    self._vox_accum_cnt += B
+    self._occ_pruning_cnt += B
+    self._sem_pruning_cnt += B
+
+    if self._ray_accum_delay > 0:
+      self._ray_accum_delay -= B
+    else:
+      self._ray_accum_cnt += B
+
+    if vox_xyz.shape[0] > 0:
+      self._tmp_vox_occ.append(vox_occ)
+      self._tmp_vox_xyz.append(vox_xyz)
+    if pc_xyz.shape[0] > 0:
+      self._tmp_pc_xyz.append(pc_xyz)
+      self._tmp_pc_rgb_feat_cnt.append(pts_rgb_feat_cnt)
+
+    if origs.shape[0] > 0:
+      self._tmp_ray_feat.append(dirs_feat)
+      self._tmp_ray_orig.append(origs)
+      self._tmp_ray_dir.append(dirs)
+
+    if self._vox_accum_cnt >= self.vox_accum_period:
+      self._vox_accum_cnt = 0
+
+      ## 1. Accumulate occupancy voxels
+      updated_vox_xyz = self.accum_occ_voxels()
+
+      ## 2. Accumulate semantic voxels
+      self.accum_semantic_voxels()
+
+      ## 3. Prune occupancy map
+      if (self.occ_pruning_period > -1 and
+          self._occ_pruning_cnt >= self.occ_pruning_period):
+
+        self._occ_pruning_cnt = 0
+        self.occ_map_vdb.prune(self.occ_pruning_tolerance)
+
+      ## 4. Prune semantic voxels
+      if (self.sem_pruning_period > -1 and
+          self.global_vox_xyz is not None and
+          self.global_vox_xyz.shape[0] > 0 and
+          self._sem_pruning_cnt >= self.sem_pruning_period):
+
+        self._sem_pruning_cnt = 0
+        self.prune_semantic_voxels(
+          torch.cat(self._tmp_vox_xyz_since_prune, dim=0))
+        self._tmp_vox_xyz_since_prune.clear()
+
+      ## 5. Update Frontiers
+
+      # Compute active window/bbox.
+      # TODO: Test if its faster to project boundary points and pose centers
+      # instead of doing min max over all tmp voxels. Or maybe let occ_pc2vdb
+      # return the bounding box since it will iterate over all voxels already.
+      if updated_vox_xyz.shape[0] > 0:
+        active_bbox_min = torch.min(updated_vox_xyz, dim = 0).values
+        active_bbox_max = torch.max(updated_vox_xyz, dim = 0).values
+        self.update_frontiers(active_bbox_min, active_bbox_max)
+
+    if self._ray_accum_cnt >= self.ray_accum_period:
+      self._ray_accum_cnt = 0
+
+      ## 6. Prune semantic rays
+      self.prune_semantic_rays()
+
+      ## 7. Update semantic rays
+      self.cast_semantic_rays()
+
+      if self.infer_direction:
+        self.compute_inferred_directions()
+
     return update_info
 
   def cast_semantic_rays(self) -> None:
@@ -891,6 +1041,9 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
 
     # Vis frontiers
     if self.frontiers is not None and self.frontiers.shape[0] > 0:
+      #print("self.frontiers", self.frontiers.shape[0])
+      #for i in range(self.frontiers.shape[0]):
+      #  print(self.frontiers[i])
       self.visualizer.log_pc(self.frontiers, layer="frontiers")
 
     # Vis rays
