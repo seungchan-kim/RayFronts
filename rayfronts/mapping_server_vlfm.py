@@ -312,7 +312,7 @@ class MappingServer(Node):
         indices = [self._queries_labels['text'].index(target_object) for target_object in self._target_objects]
         ray_feat = self.mapper.global_rays_feat
         if ray_feat is not None and ray_feat.shape[0] > 0:
-          ray_lang_aligned = self.mapper.encoder.align_spatiala_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
+          ray_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
           if ray_lang_aligned.ndim == 4:
             ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
           if ray_lang_aligned.ndim == 2:
@@ -326,8 +326,9 @@ class MappingServer(Node):
             _, flat_idx = torch.max(relevant_scores.view(-1), dim=0)
             ray_idx = flat_idx // relevant_scores.shape[1]
 
-            ray_orig = self.mapper.ray_orig_angles[:,:3]
-            selected_orig = ray_orig[ray_idx]
+            ray_orig = self.mapper.global_rays_orig_angles[:,:3]
+            selected_orig = ray_orig[ray_idx].unsqueeze(0)
+            #from pdb import set_trace as bp; bp()
 
             orig_world = torch.stack([selected_orig[:,2],-selected_orig[:,0],-selected_orig[:,1]],dim=1)
 
@@ -335,9 +336,11 @@ class MappingServer(Node):
             path.header.stamp = self.get_clock().now().to_msg()
             path.header.frame_id = 'map'
 
-            origin = orig_world.cpu().numpy()
+            origin = orig_world[0].cpu().numpy()
             direction = origin - cur_pose_np
             direction_norm = direction / np.linalg.norm(direction)
+
+            #from pdb import set_trace as bp; bp()
 
             alpha=0.8
             mid_pose_np = cur_pose_np * (1-alpha) + origin * alpha
@@ -348,6 +351,7 @@ class MappingServer(Node):
             mid_pose.pose.position.y = float(mid_pose_np[1])
             mid_pose.pose.position.z = float(mid_pose_np[2])
             mid_pose.pose.orientation.w = 1.0
+            path.poses.append(mid_pose)
 
             target_waypoint1 = origin
 
