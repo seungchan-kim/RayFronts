@@ -28,12 +28,15 @@ import numpy as np
 import hydra
 
 from rayfronts import datasets, visualizers, image_encoders, mapping, utils
+from rayfronts.vlfm_manager import VlfmManager
+from visualization_msgs.msg import Marker, MarkerArray
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 from rayfronts.utils import compute_cos_sim
+import scipy.ndimage
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +71,19 @@ class MappingServer(Node):
       hydra.utils.instantiate(cfg.dataset)
     
     self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
+    self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
+
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
+    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher}
+    self._target_objects = []
+    self.subscriber_dict = {}
+
+    self.vlfm_manager = VlfmManager(get_clock=self.get_clock, publisher_dict=self.publisher_dict, node=self)
+
+    self.behavior_mode = 'VLFM-based'
+    self.waypoint_locked = False
+    self.target_waypoint = None
+    self.target_waypoint2 = None
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -307,66 +322,19 @@ class MappingServer(Node):
       r = self.mapper.process_posed_rgbd_vlfm(rgb_img, depth_img, pose_4x4, **kwargs)
       map_t1 = time.time()
 
-      #VLFM Planner
-      if self._queries_labels is not None and self._queries_labels['text'] is not None and len(self._target_objects) > 0:
-        indices = [self._queries_labels['text'].index(target_object) for target_object in self._target_objects]
-        ray_feat = self.mapper.global_rays_feat
-        if ray_feat is not None and ray_feat.shape[0] > 0:
-          ray_lang_aligned = self.mapper.encoder.align_spatial_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
-          if ray_lang_aligned.ndim == 4:
-            ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
-          if ray_lang_aligned.ndim == 2:
-            ray_lang_aligned = ray_lang_aligned
-          if ray_lang_aligned.ndim == 1:
-            ray_lang_aligned = ray_lang_aligned.unsqueeze(0)
-          
-          if self._queries_feats is not None:
-            ray_scores = compute_cos_sim(self._queries_feats['text'], ray_lang_aligned, softmax=True)
-            relevant_scores = ray_scores[:,indices]
-            _, flat_idx = torch.max(relevant_scores.view(-1), dim=0)
-            ray_idx = flat_idx // relevant_scores.shape[1]
+      self.vlfm_manager.mode_select(queries_labels=self._queries_labels,
+                                        target_objects=self._target_objects,  
+                                        queries_feats=self._queries_feats, 
+                                        mapper=self.mapper, 
+                                        publisher_dict=self.publisher_dict, 
+                                        subscriber_dict=self.subscriber_dict)
+      if self.behavior_mode != self.vlfm_manager.behavior_mode:
+        self.mode_switch_trigger()
+      self.behavior_mode = self.vlfm_manager.behavior_mode
 
-            ray_orig = self.mapper.global_rays_orig_angles[:,:3]
-            selected_orig = ray_orig[ray_idx].unsqueeze(0)
-            #from pdb import set_trace as bp; bp()
+      point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 
-            orig_world = torch.stack([selected_orig[:,2],-selected_orig[:,0],-selected_orig[:,1]],dim=1)
-
-            path = Path()
-            path.header.stamp = self.get_clock().now().to_msg()
-            path.header.frame_id = 'map'
-
-            origin = orig_world[0].cpu().numpy()
-            direction = origin - cur_pose_np
-            direction_norm = direction / np.linalg.norm(direction)
-
-            #from pdb import set_trace as bp; bp()
-
-            alpha=0.8
-            mid_pose_np = cur_pose_np * (1-alpha) + origin * alpha
-            mid_pose = PoseStamped()
-            mid_pose.header.stamp = self.get_clock().now().to_msg()
-            mid_pose.header.frame_id = 'map'
-            mid_pose.pose.position.x = float(mid_pose_np[0])
-            mid_pose.pose.position.y = float(mid_pose_np[1])
-            mid_pose.pose.position.z = float(mid_pose_np[2])
-            mid_pose.pose.orientation.w = 1.0
-            path.poses.append(mid_pose)
-
-            target_waypoint1 = origin
-
-            t1_pose = PoseStamped()
-            t1_pose.header.stamp = self.get_clock().now().to_msg()
-            t1_pose.header.frame_id = 'map'
-            t1_pose.pose.position.x = float(target_waypoint1[0])
-            t1_pose.pose.position.y = float(target_waypoint1[1])
-            t1_pose.pose.position.z = float(target_waypoint1[2])
-            t1_pose.pose.orientation.w = 1.0
-            path.poses.append(t1_pose)
-
-            self.path_publisher.publish(path)
-
-
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.vlfm_manager.behavior_execute(self, self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict) 
 
       if self.vis is not None:
         if i % self.cfg.vis.input_period == 0:
@@ -470,6 +438,11 @@ class MappingServer(Node):
     for target in self._target_objects:
       if target not in self._queries_labels['text']:
         self.add_queries(target)
+  
+  def mode_switch_trigger(self):
+    self.waypoint_locked = False
+    self.target_waypoint = None
+    self.target_waypoint2 = None
 
 def signal_handler(mapping_server: MappingServer, sig, frame):
   with mapping_server._status_lock:
