@@ -1,0 +1,257 @@
+[
+  {
+    "class": "ship",
+    "bbox_world": {
+      "center_xyz_m": [
+        92.0,
+        37.0,
+        4.5
+      ],
+      "size_xyz_m": [
+        48.0,
+        14.0,
+        8.0
+      ]
+    }
+  },
+  {
+    "class": "ship",
+    "bbox_world": {
+      "center_xyz_m": [
+        96.0,
+        -20.0,
+        6.5
+      ],
+      "size_xyz_m": [
+        20.0,
+        40.0,
+        12.0
+      ]
+    }
+  },
+  {
+    "class": "ship",
+    "bbox_world": {
+      "center_xyz_m": [
+        210.0,
+        143.0,
+        15.5
+      ],
+      "size_xyz_m": [
+        30.0,
+        190.0,
+        30.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        110.0,
+        -27.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        10.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        140.0,
+        -18.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        10.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        98.0,
+        54.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        10.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        98.0,
+        76.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        10.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        160.0,
+        66.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        20.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        77.0,
+        -20.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        10.0,
+        25.0
+      ]
+    }
+  },
+  {
+    "class": "crane",
+    "bbox_world": {
+      "center_xyz_m": [
+        -20.0,
+        -55.0,
+        18.5
+      ],
+      "size_xyz_m": [
+        10.0,
+        20.0,
+        36.0
+      ]
+    }
+  },
+  {
+    "class": "white silo",
+    "bbox_world": {
+      "center_xyz_m": [
+        -32.0,
+        28.0,
+        10.5
+      ],
+      "size_xyz_m": [
+        7.0,
+        7.0,
+        20.0
+      ]
+    }
+  },
+  {
+    "class": "white silo",
+    "bbox_world": {
+      "center_xyz_m": [
+        -35.0,
+        -28.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        7.0,
+        7.0,
+        26.0
+      ]
+    }
+  },
+  {
+    "class": "white silo",
+    "bbox_world": {
+      "center_xyz_m": [
+        -35.0,
+        -55.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        7.0,
+        7.0,
+        26.0
+      ]
+    }
+  },
+  {
+    "class": "white silo",
+    "bbox_world": {
+      "center_xyz_m": [
+        -35.0,
+        -80.0,
+        13.5
+      ],
+      "size_xyz_m": [
+        7.0,
+        7.0,
+        26.0
+      ]
+    }
+  },
+  {
+    "class": "ship construction",
+    "bbox_world": {
+      "center_xyz_m": [
+        139.0,
+        66.0,
+        0.5
+      ],
+      "size_xyz_m": [
+        15.0,
+        40.0,
+        20.0
+      ]
+    }
+  },
+  {
+    "class": "ship construction",
+    "bbox_world": {
+      "center_xyz_m": [
+        114.0,
+        66.0,
+        0.5
+      ],
+      "size_xyz_m": [
+        15.0,
+        40.0,
+        12.0
+      ]
+    }
+  },
+  {
+    "class": "ship construction",
+    "bbox_world": {
+      "center_xyz_m": [
+        122.0,
+        -20.0,
+        0.5
+      ],
+      "size_xyz_m": [
+        15.0,
+        70.0,
+        20.0
+      ]
+    }
+  }
+]
