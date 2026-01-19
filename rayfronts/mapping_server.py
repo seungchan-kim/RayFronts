@@ -286,9 +286,9 @@ class MappingServer:
 
       # Visualize inputs
       if self.vis is not None:
-        if i % self.cfg.vis.pose_period == 0:
+        if self.cfg.vis.pose_period > 0 and i % self.cfg.vis.pose_period == 0:
           self.vis.log_pose(batch["pose_4x4"][-1])
-        if i % self.cfg.vis.input_period == 0:
+        if self.cfg.vis.input_period > 0 and i % self.cfg.vis.input_period == 0:
           self.vis.log_img(batch["rgb_img"][-1].permute(1,2,0))
           self.vis.log_depth_img(depth_img.cpu()[-1].squeeze())
           if "confidence_map" in batch.keys():
@@ -301,12 +301,12 @@ class MappingServer:
       map_t1 = time.time()
 
       if self.vis is not None:
-        if i % self.cfg.vis.input_period == 0:
+        if self.cfg.vis.input_period > 0 and i % self.cfg.vis.input_period == 0:
           self.mapper.vis_update(**r)
-        if i % self.cfg.vis.map_period == 0:
+        if self.cfg.vis.map_period > 0 and i % self.cfg.vis.map_period == 0:
           self.mapper.vis_map()
 
-      if i % self.cfg.querying.period == 0:
+      if self.cfg.querying.period > 0 and i % self.cfg.querying.period == 0:
         self.run_queries()
 
       if self.vis is not None:
