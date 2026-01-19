@@ -211,8 +211,9 @@ class SemSegEval:
     gt_encoder = image_encoders.GTEncoder(classes=names)
 
     # TODO: Have a better visualizer of class logits.
-    prev_feat_compressor = self.vis.feat_compressor
-    self.vis.feat_compressor = feat_compressors.PcaCompressor(3)
+    if self.vis is not None:
+      prev_feat_compressor = self.vis.feat_compressor
+      self.vis.feat_compressor = feat_compressors.PcaCompressor(3)
 
     semseg_gt_lifter = mapping.SemanticVoxelMap(
       self.dataset.intrinsics_3x3, None, self.vis,
@@ -255,7 +256,8 @@ class SemSegEval:
       semseg_gt_lifter.global_vox_feat, text_embeds,
       0, 0.1, self.cfg.chunk_size)
 
-    self.vis.feat_compressor = prev_feat_compressor
+    if self.vis is not None:
+      self.vis.feat_compressor = prev_feat_compressor
 
     return semseg_gt_xyz, semseg_gt_label
 
