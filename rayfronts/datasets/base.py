@@ -1,7 +1,7 @@
 """Defines abstract base classes for all datasets/datasources."""
 
 import abc
-from typing import Tuple, Union, List, Hashable, Dict
+from typing import Tuple, Union, List, Dict
 import copy
 
 import torch

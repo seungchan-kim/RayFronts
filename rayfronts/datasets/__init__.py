@@ -13,6 +13,11 @@ try:
 except:
   failed_to_import.append("DummyDataset")
 
+try:
+  from rayfronts.datasets.airsim import AirSimDataset
+except:
+  failed_to_import.append("AirSimDataset")
+
 if len(failed_to_import) > 0:
   logger.info(
     "Could not import %s. Make sure you have their extra dependencies "

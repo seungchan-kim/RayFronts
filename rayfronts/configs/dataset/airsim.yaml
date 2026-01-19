@@ -1,0 +1,19 @@
+defaults:
+  - base_dataset
+
+_target_: rayfronts.datasets.AirSimDataset
+
+# Camera name defined in Airsim settings
+camera_name: Front
+
+# Vehicle name defined in Airsim settings
+vehicle_name: Drone1
+
+# Depth cutoff distance in meters. Depth beyond this distance set to too far.
+depth_cutoff: 50
+
+# Airsim server IP address
+ip: ""
+
+# Airsim server port
+port: 41451
