@@ -2,14 +2,18 @@
 
 This directory hosts all available data sources.
 
+More details about each dataset can be found in within-code documentation.
+
 ## Available Options:
 - [NiceReplica](replica.py): Replica dataset version processed by [Nice-Slam](https://github.com/cvg/nice-slam/)
 - [SemanticNerfReplica](replica.py): Replica dataset version processed by [Semantic_nerf](https://github.com/Harry-Zhi/semantic_nerf). This version can provide 2D semantic segmentation images as well.
-- [ScanNet](scannet.py): Reads from processed prerecorded indoor [ScanNet data](https://github.com/ScanNet/ScanNet/tree/master). 
+- [ScanNet](scannet.py): Reads from processed prerecorded indoor [ScanNet data](https://github.com/ScanNet/ScanNet/tree/master).
+- [ScanNet++](scannetpp.py): ScanNet++ dataset processed according to the instructions in [ScanNet++ Data Preprocessing](scannetpp_prep.md).
 - [TartanAirV2](tartanair.py) Reads from [TartanAirV2](https://tartanair.org/) and [TartanGround](https://tartanair.org/tartanground/).
 - [Ros2Subscriber](ros.py): Subscribe to any ros2 topics that provide posed RGBD information.
+- [Dummy](dummy.py): A self-contained dummy dataset generator for testing. Simply generates a room with some object primitives and rotates around it.
+- [Airsim](airsim.py): Connects to an Airsim server and polls for posed RGBD information.
 - [Rosnpy](ros.py): (Deprecated).
-- [ScanNet++](scannetpp.py): ScanNet++ dataset processed according to the instructions in [ScanNet++ Data Preprocessing](scannetpp_prep.md).
 
 ## Adding a Dataset
 0. Read the [CONTRIBUTING](../../CONTRIBUTING.md) file.
