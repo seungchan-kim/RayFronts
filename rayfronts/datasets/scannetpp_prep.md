@@ -100,7 +100,7 @@ Once the rendering is complete, you must provide the path to these generated dep
 
 #### Option 1. Download the Ground-Truth file 
 
-You can download the `external_semseg_gt.pt` files from this [link]() for each scene_id. 
+You can download the `external_semseg_gt.pt` files from this [link](https://cmu.box.com/s/4hxi5bsz5ta520v1xha9j08u6lbslxks) for each scene_id. 
 
 #### Option 2. Generate ground-truth on your own
 
