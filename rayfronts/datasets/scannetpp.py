@@ -127,7 +127,7 @@ class ScanNetPPDataset(SemSegDataset):
       for i, aa in enumerate(aaa):
         aa = aa.strip()
         semdict[i+1] = aa
-      self._cat_id_to_name = semdict
+      self._init_semseg_mappings(semdict)
 
   @property
   @override
