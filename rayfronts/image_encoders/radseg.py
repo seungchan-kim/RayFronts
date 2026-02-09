@@ -283,12 +283,22 @@ class RADSegEncoder(ImageSemSegEncoder):
     if orig_img_size is None:
       orig_img_size = rgb_image.shape[-2:]
     
+    use_scga = False
     if self.slide_crop > 0:
-      feat_map = self._sliding_inference(rgb_image, stride=self.slide_stride, crop_size=self.slide_crop)
+      feat_map, num_windows = self._sliding_inference(
+        rgb_image,
+        stride=self.slide_stride,
+        crop_size=self.slide_crop,
+      )
+      # Only apply SCGA when sliding-window actually used multiple windows.
+      # If sliding-window degenerates to a single window (e.g. input smaller
+      # than crop size), SCGA is skipped.
+      use_scga = num_windows > 1
     else:
       feat_map = self._single_inference(rgb_image)
     
-    feat_map = self._self_correlating_global_aggregation(feat_map)
+    if use_scga:
+      feat_map = self._self_correlating_global_aggregation(feat_map)
     if not self.predict:
       return feat_map
 
@@ -544,4 +554,5 @@ class RADSegEncoder(ImageSemSegEncoder):
         count_mat[:, :,coord[0]:coord[2],coord[1]:coord[3]] += 1
     feat_map = feat_map / count_mat  # 1, D, dst_h, dst_w
 
-    return feat_map
+    num_windows = h_grids * w_grids
+    return feat_map, num_windows
