@@ -19,6 +19,7 @@ dependencies:
   - pip:
     - rerun-sdk
     - timm
+    - segment-anything
     - einops
     - open_clip_torch
     - transformers

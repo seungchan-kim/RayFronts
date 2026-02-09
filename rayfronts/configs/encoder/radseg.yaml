@@ -1,0 +1,37 @@
+defaults:
+  - base_encoder
+
+_target_: rayfronts.image_encoders.RADSegEncoder
+
+# Choose from "c-radio_v3-x" where x can be b or l.
+# More models can be found on https://github.com/NVlabs/RADIO/
+model_version: c-radio_v3-b
+
+# Language model to use for text encoding
+lang_model: siglip2
+
+# Scaling factor for Self-Correlating Recursive Attention (SCRA)
+scra_scaling: 10.0
+
+# Scaling factor for Self-Correlating Global Aggregation (SCGA)
+scga_scaling: 10.0
+
+# Whether to return radio features which are not language aligned or whether to
+# project them to the language aligned space directly.
+return_radio_features: True
+
+# Whether to compile the model.
+compile: ${compile}
+
+# Whether to use automatic mixed precision when inferring.
+amp: ${amp}
+
+# Set to true for RADSeg to output segmentation probabilities directly.
+predict: False
+
+# Sliding window inference (set slide_crop > 0 to enable)
+slide_crop: 0
+slide_stride: 224
+
+# Enable RADIO-SAM mask refinement for RADSeg+
+sam_refinement: False
