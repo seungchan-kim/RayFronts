@@ -21,14 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     python3-requests \
     python3-yaml \
-    wget
+    wget \
+    git
 
 ## Install python dependencies
 RUN pip install \
-  torch==2.4.1 \
-  torchvision==0.19.1 \
-  torchaudio==2.4.1 \
-  --index-url https://download.pytorch.org/whl/cu121
+  torch==2.9.1 \
+  torchvision \
+  torchaudio \
+  --index-url https://download.pytorch.org/whl/cu130
 
 RUN pip install \
   protobuf \
@@ -46,7 +47,12 @@ RUN pip install \
   transformers \
   idna==3.10 \
   requests==2.32.3 \
-  pandas
+  pandas \
+  scikit-learn \
+  scikit-image 
+
+RUN pip install git+https://github.com/facebookresearch/segment-anything.git
+ 
 
 ## Compile & install patched open-vdb (Need open-vdb 12.0 that exposes Int8Grid to python)
 

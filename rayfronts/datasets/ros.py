@@ -73,6 +73,7 @@ class Ros2Subscriber(PosedRgbdDataset):
                intrinsics_topic = None,
                intrinsics_file = None,
                src_coord_system = "flu",
+               pose_msg_type = "PoseStamped",
                frame_skip = 0,
                interp_mode="bilinear"):
     """
@@ -138,9 +139,14 @@ class Ros2Subscriber(PosedRgbdDataset):
       g3d.get_coord_system_transform(src_coord_system, "rdf"))
 
     # Setup ros node
+    _pose_msg_types = {"PoseStamped": PoseStamped, "Odometry": Odometry}
+    if pose_msg_type not in _pose_msg_types:
+      raise ValueError(f"Unknown pose_msg_type '{pose_msg_type}'. "
+                       f"Choose from {list(_pose_msg_types.keys())}")
+    self._pose_msg_type = pose_msg_type
     msg_str_to_type = OrderedDict(
       rgb = Image,
-      pose = PoseStamped,
+      pose = _pose_msg_types[pose_msg_type],
       disp = DisparityImage,
       depth = Image,
       pc = PointCloud,
@@ -166,7 +172,7 @@ class Ros2Subscriber(PosedRgbdDataset):
     self._frame_msgs_queue = queue.Queue(maxsize=10)
 
     self._time_sync = message_filters.ApproximateTimeSynchronizer(
-      list(self._subs.values()), queue_size = 10, slop = 0.01,
+      list(self._subs.values()), queue_size = 10, slop = 0.1,
       allow_headerless = False)
     self._time_sync.registerCallback(self._buffer_frame_msgs)
 
@@ -250,8 +256,12 @@ class Ros2Subscriber(PosedRgbdDataset):
                              dtype=torch.float).permute(2, 0, 1)
 
       # Parse Pose
+      if self._pose_msg_type == "Odometry":
+        pose_msg = msgs["pose"].pose.pose
+      else:
+        pose_msg = msgs["pose"].pose
       src_pose_4x4 = torch.tensor(
-        pose_to_numpy(msgs["pose"].pose), dtype=torch.float)
+        pose_to_numpy(pose_msg), dtype=torch.float)
       rdf_pose_4x4 = g3d.transform_pose_4x4(
         src_pose_4x4, self.src2rdf_transform)
 

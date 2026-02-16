@@ -6,11 +6,29 @@ Typical usage:
   vis.log_img(img, layer="rgb_img", pose_layer="cam0")
   vis.step()
 """
+
 from typing_extensions import override
 from typing import Tuple
 
 import rerun as rr
 import torch
+import os
+import socket
+from contextlib import closing
+
+def _port_open(host: str, port: int, timeout_s: float = 0.15) -> bool:
+  with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as sock:
+    sock.settimeout(timeout_s)
+    try:
+      return sock.connect_ex((host, port)) == 0
+    except OSError:
+      return False
+
+def _get_ros_domain_id() -> int:
+  try:
+    return int(os.environ.get("ROS_DOMAIN_ID", "0"))
+  except ValueError:
+    return 0
 
 from rayfronts.visualizers.base import Mapping3DVisualizer
 from rayfronts import feat_compressors
@@ -51,15 +69,44 @@ class RerunVis(Mapping3DVisualizer):
     super().__init__(intrinsics_3x3, img_size, base_point_size,
                      global_heat_scale, feat_compressor)
 
-    rr.init("semantic_mapping_vis", spawn=True)
-    rr.set_time_seconds("stable_time", 0)
-    self._base_name = "world"
+    # ---- Rerun setup (shared viewer + shared recording, namespaced per robot) ----
+    ros_domain_id = _get_ros_domain_id()
+
+    # All processes use the SAME recording_id so their data merges into one scene.
+    # Namespacing prevents entity-path collisions.
+    app_id = "semantic_mapping_vis"
+    recording_id = "multi_robot_live"  # keep constant across processes
+
+    # Where we try to connect. You can also control this via env vars if you want.
+    host = os.environ.get("RERUN_HOST", "127.0.0.1")
+    port = int(os.environ.get("RERUN_PORT", "9876"))
+    addr = f"{host}:{port}"
+
+    rr.init(app_id, recording_id=recording_id, spawn=False)
+
+    # Connect if viewer/server is already up; otherwise spawn it once and connect.
+    if _port_open(host, port):
+      rr.connect(addr)
+    else:
+      rr.spawn()          # starts the viewer
+      rr.connect(addr)    # then connect this process to it
+
+    # Namespace this robot under robot_{ROS_DOMAIN_ID}/...
+    self._base_name = f"robot_{ros_domain_id}/world"
+
+    # Don't force-reset time to 0 on every new process; just set an initial step if unset.
+    # (Each process will advance its own time values as it logs.)
+    rr.set_time_seconds("stable_time", 0.0)
+
     rr.log(self._base_name, rr.ViewCoordinates.RDF, static=True)
-    rr.log(self._base_name,
+    rr.log(
+      self._base_name,
       rr.Arrows3D(
         vectors=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         colors=[[255, 0, 0], [0, 255, 0], [0, 0, 255]],
-      ))
+      ),
+      static=True,
+    )
     self._height = None
     self._width = None
     self._prev_poses_4x4 = dict()
