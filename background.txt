@@ -1,0 +1,4 @@
+tree
+sky
+house
+parking lot

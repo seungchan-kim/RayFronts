@@ -19,7 +19,7 @@ batch_size: 1
 
 # Imposing a depth limit on the data such that to test limited depth scenarios
 # Set to a negative number to not use a limit
-depth_limit: -1
+depth_limit: 20
 
 # Which pytorch interpolation mode for rgb and feature interpolation 
 # (Depth and Segmentation always use nearest-exact)
@@ -45,7 +45,7 @@ querying:
   # exists, the query is assumed to be a text query.
   # .json: A dictionary where the query is the key and the value is a hex
   # color such that the query is colorized using that in the visualization.
-  query_file: 'test.txt'
+  query_file: 'background.txt'
 
   # Whether softmax probability is computed across queries or not.
   # If you want results to be independent of other queries set this to false.

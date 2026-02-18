@@ -78,14 +78,31 @@ class MappingServer(Node):
     self.dataset: datasets.PosedRgbdDataset = \
       hydra.utils.instantiate(cfg.dataset)
 
-    self.path_publisher = self.create_publisher(Path, '/robot_1/global_plan', 10)
-    self.voxel_bbox_publisher = self.create_publisher(MarkerArray, '/filtered_voxel_bbox', 10)
+    ros_domain_id = os.getenv("ROS_DOMAIN_ID", "0").strip()
+    if not ros_domain_id:
+      ros_domain_id = "0"
+    self.robot_topic_prefix = f"/robot_{ros_domain_id}"
 
-    self.filtered_rays_publisher = self.create_publisher(MarkerArray, '/filtered_rays', 10)
+    self.path_publisher = self.create_publisher(
+      Path, self._robot_topic('global_plan'), 10)
+    self.voxel_bbox_publisher = self.create_publisher(
+      MarkerArray, self._robot_topic('filtered_voxel_bbox'), 10)
 
-    self.viewpoint_publisher = self.create_publisher(PointCloud2, "/frontier_viewpoints", 10)
+    self.filtered_rays_publisher = self.create_publisher(
+      MarkerArray, self._robot_topic('filtered_rays'), 10)
+
+    self.viewpoint_publisher = self.create_publisher(
+      PointCloud2, self._robot_topic("frontier_viewpoints"), 10)
 
     self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
+    logger.info(
+      "ROS_DOMAIN_ID=%s | publishing to: %s, %s, %s, %s",
+      ros_domain_id,
+      self.path_publisher.topic_name,
+      self.voxel_bbox_publisher.topic_name,
+      self.filtered_rays_publisher.topic_name,
+      self.viewpoint_publisher.topic_name
+    )
 
     self.subscriber_dict = {}
 
@@ -112,6 +129,9 @@ class MappingServer(Node):
 
     self.vis: visualizers.Mapping3DVisualizer = None
     if "vis" in cfg and cfg.vis is not None:
+      if "topic_prefix" in cfg.vis:
+        cfg.vis.topic_prefix = self._robot_topic("rayfronts")
+        logger.info("Visualizer topic prefix set to %s", cfg.vis.topic_prefix)
       logger.info("Initializing visualizer: %s", cfg.vis._target_)
       self.vis = hydra.utils.instantiate(cfg.vis, intrinsics_3x3=intrinsics_3x3,
                                          base_point_size=base_point_size)
@@ -177,6 +197,11 @@ class MappingServer(Node):
 
     self._query_lock = threading.RLock()
 
+    self._target_objects = ['red building', 'fuel tank']
+
+    for i in range(len(self._target_objects)):
+      self.add_queries(self._target_objects[i])
+
     if cfg.querying.query_file is not None:
       with open(cfg.querying.query_file, "r", encoding="UTF-8") as f:
         if cfg.querying.query_file.endswith(".json"):
@@ -186,7 +211,7 @@ class MappingServer(Node):
                               k, v in cmap_queries.items()}
         else:
           queries = [l.strip() for l in f.readlines()]
-          self._target_objects = queries
+          self._background_objects = queries
           #print("queries", queries)
           #from pdb import set_trace as bp; bp()
         self.add_queries(queries)
@@ -196,6 +221,9 @@ class MappingServer(Node):
       self.messaging_service = hydra.utils.instantiate(
         cfg.messaging_service,
         text_query_callback = self.add_queries if init_encoder else None)
+
+  def _robot_topic(self, topic: str) -> str:
+    return f"{self.robot_topic_prefix}/{topic.lstrip('/')}"
 
   @torch.inference_mode()
   def add_queries(self, queries: List[str]):

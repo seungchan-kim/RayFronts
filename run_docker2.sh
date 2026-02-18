@@ -11,6 +11,7 @@ docker run -it \
 	-e DISPLAY="${DISPLAY:-:0}" \
 	-e QT_X11_NO_MITSHM=1 \
 	-v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-	-v ~/seungchan-kim/RayFronts:/workspace/RayFronts \
+	-v ~/work/RayFronts:/workspace/RayFronts \
 	-w /workspace/RayFronts \
 	rayfronts:desktop-models
+
