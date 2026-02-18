@@ -186,6 +186,9 @@ class MappingServer(Node):
                               k, v in cmap_queries.items()}
         else:
           queries = [l.strip() for l in f.readlines()]
+          self._target_objects = queries
+          #print("queries", queries)
+          #from pdb import set_trace as bp; bp()
         self.add_queries(queries)
 
     self.messaging_service = None
@@ -541,6 +544,11 @@ class MappingServer(Node):
     header.frame_id = 'map'
     return point_cloud2.create_cloud(header,fields, points)
 
+
+  def mode_switch_trigger(self):
+    self.waypoint_locked = False
+    self.target_waypoint = None
+    self.target_waypoint2 = None
 
 def signal_handler(mapping_server: MappingServer, sig, frame):
   with mapping_server._status_lock:

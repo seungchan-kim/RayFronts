@@ -27,9 +27,10 @@ class RayBehavior:
             label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
             print(queries_labels['text'])
             ray_feat = mapper.global_rays_feat
-            print("ray_feat", ray_feat.shape)
+            #print("ray_feat", ray_feat.shape)
             ray_orig_angles = mapper.global_rays_orig_angles  
             if ray_feat is not None and ray_orig_angles is not None and ray_feat.shape[0] > 0:
+                print("ray_feat", ray_feat.shape)
                 ray_lang_aligned = mapper.encoder.align_spatial_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
                 if ray_lang_aligned.ndim == 4:
                     ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
