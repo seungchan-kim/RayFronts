@@ -250,10 +250,14 @@ class Ros2Subscriber(PosedRgbdDataset):
       msgs = dict(zip(self._subs.keys(), msgs))
 
       # Parse RGB
-      bgra_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
-      bgr_img = bgra_img[..., :3]
-      rgb_img = torch.tensor(bgr_img[..., (2,1,0)],
-                             dtype=torch.float).permute(2, 0, 1)
+      # bgra_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
+      # bgr_img = bgra_img[..., :3]
+      # rgb_img = torch.tensor(bgr_img[..., (2,1,0)],
+      #                        dtype=torch.float).permute(2, 0, 1)
+      rgba_img = image_to_numpy(msgs["rgb"]).astype("float") / 255
+      rgb_img = rgba_img[..., :3]
+      rgb_img = torch.tensor(rgb_img,dtype=torch.float).permute(2, 0, 1)
+
 
       # Parse Pose
       if self._pose_msg_type == "Odometry":

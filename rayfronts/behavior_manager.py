@@ -5,6 +5,7 @@ import numpy as np
 from rayfronts.behaviors.frontier_behavior import FrontierBehavior
 #from rayfronts.behaviors.ray_gradient_behavior import RayGradientBehavior
 from rayfronts.utils import compute_cos_sim
+from rayfronts.behaviors.ray_behavior import RayBehavior
 
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import ColorRGBA
@@ -15,11 +16,12 @@ class BehaviorManager:
         self.behavior_mode = 'Frontier-based'
         self.get_clock = get_clock
         self.frontier_behavior = FrontierBehavior(self.get_clock)
+        self.ray_behavior = RayBehavior(self.get_clock)
         #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.frontier_behavior]
-        self.behaviors = [self.frontier_behavior]
+        #self.behaviors = [self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
-        #self.behaviors = [self.ray_behavior, self.frontier_behavior]
+        self.behaviors = [self.ray_behavior, self.frontier_behavior]
         #self.behaviors = [self.ray_gradient_behavior, self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
         #self.behaviors = [self.frontier_behavior]
@@ -32,17 +34,14 @@ class BehaviorManager:
                 return
     
     def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
-        if behavior_mode == 'Frontier-based' or True:
+        if behavior_mode == 'Frontier-based':
             wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
-        elif behavior_mode == 'Voxel-based':
+        elif behavior_mode == 'Voxel-based' and False:
             wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Ray-based':
             wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
-            return wp_locked, tw1, tw2
-        elif behavior_mode == 'LVLM-guided':
-            wp_locked, tw1, tw2 = self.lvlm_guided_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
         # elif behavior_mode == 'Ray-Gradient-based':
         #     wp_locked, tw1, tw2 = self.ray_gradient_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)

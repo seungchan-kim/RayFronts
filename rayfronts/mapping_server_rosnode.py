@@ -469,6 +469,7 @@ class MappingServer(Node):
   
   def target_object_callback(self, msg):
     targets = [t.strip().lower() for t in msg.data.split(",") if t.strip()]
+    print("msg", msg.data)
     #data_cleaned = msg.data.strip().lower()
     if not targets:
       self._target_objects = []

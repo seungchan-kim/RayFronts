@@ -47,7 +47,7 @@ class FrontierBehavior:
                 centroid_torch = torch.from_numpy(centroid)
                 centroid_torch = centroid_torch.to(transformed_frontiers.device, dtype=transformed_frontiers.dtype)
                 #only if the centroid's height is above 2m, append to the viewpoints
-                if centroid_torch[2] > 2.0:
+                if centroid_torch[2] > 4.0 and centroid_torch[2] < 10.0:
                     viewpoints.append(centroid_torch)
             if len(viewpoints) == 0:
                 return waypoint_locked, target_waypoint, target_waypoint2

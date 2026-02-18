@@ -11,10 +11,12 @@ def norm_std(x):
     return x / s
 
 def norm_01(x):
+  if x.numel() == 0:
+      return x
   x = x - x.min()
   mx = x.max()
   if mx == 0:
-    return torch.ones_like(x)*0.5
+      return torch.ones_like(x)*0.5
   else:
     return x / mx
 

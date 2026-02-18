@@ -44,7 +44,7 @@ RUN pip install \
   nanobind \
   hydra-core \
   open_clip_torch \
-  transformers \
+  transformers<5 \
   idna==3.10 \
   requests==2.32.3 \
   pandas \
