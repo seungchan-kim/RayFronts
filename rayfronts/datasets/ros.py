@@ -270,7 +270,7 @@ class Ros2Subscriber(PosedRgbdDataset):
         depth_img = torch.tensor(depth_img, dtype=torch.float).unsqueeze(0)
       elif "disp" in msgs.keys():
         # TODO: Why is disparity negative in ros2 zedx and why is max and min
-        # flipped? Not sure if this is correct ros2 zedx behaviour but will
+        # flipped? Not sure if this is correct ros2 zedx behavior but will
         # correct those here for now.
         disparity_img = -image_to_numpy(msgs["disp"].image)
         min_disp = msgs["disp"].max_disparity
