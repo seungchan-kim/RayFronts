@@ -28,6 +28,7 @@ import torchvision
 import numpy as np
 import hydra
 import struct
+import copy
 
 import rclpy
 from rclpy.node import Node
@@ -120,6 +121,9 @@ class MappingServer(Node):
     self._background_objects = []
     self._target_objects = []
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
+    self.filter_rays_subscriber = self.create_subscription(MarkerArray, '/robot_2/filtered_rays/transposed', self.filter_rays_callback, 10)
+    self.shared_xy_dir = []
+    self.subscriber_dict = {'filter_rays': self.filter_rays_subscriber}
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -401,7 +405,7 @@ class MappingServer(Node):
 
       point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
 
-      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict) 
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict, self.shared_xy_dir) 
       
 
       if self.vis is not None:
@@ -511,7 +515,17 @@ class MappingServer(Node):
     for target in self._target_objects:
       if target not in self._queries_labels['text']:
         self.add_queries(target)
-  
+
+  def filter_rays_callback(self, msg: MarkerArray):
+    out = copy.deepcopy(msg)
+    #self.xy_dir = []
+    self.shared_xy_dir = []
+    for marker in out.markers:
+      if len(marker.points) == 2:
+        x_dir = marker.points[1].x - marker.points[0].x
+        y_dir = marker.points[1].y - marker.points[0].y
+        self.shared_xy_dir.append((x_dir, y_dir))
+
 
   def clear_filtered_rays(self):
     if self.prev_filtered_marker_ids > 0:

@@ -25,12 +25,12 @@ class RayBehavior:
         
         if queries_labels is not None and queries_labels['text'] is not None and len(target_objects) > 0:
             label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
-            print(queries_labels['text'])
+            #print(queries_labels['text'])
             ray_feat = mapper.global_rays_feat
             #print("ray_feat", ray_feat.shape)
             ray_orig_angles = mapper.global_rays_orig_angles  
             if ray_feat is not None and ray_orig_angles is not None and ray_feat.shape[0] > 0:
-                print("ray_feat", ray_feat.shape)
+                #print("ray_feat", ray_feat.shape)
                 ray_lang_aligned = mapper.encoder.align_spatial_features_with_language(ray_feat.unsqueeze(-1).unsqueeze(-1))
                 if ray_lang_aligned.ndim == 4:
                     ray_lang_aligned = ray_lang_aligned.squeeze(-1).squeeze(-1)
@@ -41,7 +41,7 @@ class RayBehavior:
 
                 if queries_feats is not None:
                     ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
-                    print("ray_scores", ray_scores)
+                    #print("ray_scores", ray_scores)
                     threshold = 0.95
 
                     relevant_scores = ray_scores[:,label_indices]
@@ -56,7 +56,7 @@ class RayBehavior:
 
         return False
     
-    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
+    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir):
         path_publisher = publisher_dict['path']
         cur_pose_np = point3d_dict['cur_pose']
         target_waypoint1 = point3d_dict['target1']
@@ -86,6 +86,20 @@ class RayBehavior:
         valid_mask = dot > 0
 
         xy_dirs_np_normed = xy_dirs_np_normed[valid_mask]
+
+        robot_topic = getattr(path_publisher, "topic_name", "")
+        robot_1 = "/robot_1/" in robot_topic or robot_topic.startswith("/robot_1")
+        robot_2 = "/robot_2/" in robot_topic or robot_topic.startswith("/robot_2")
+
+        if robot_1:
+            print("==========================")
+            print("xy_dirs before concatenation", xy_dirs.shape)
+            print("shared_xy_dir", len(shared_xy_dir))
+            shared_xy_dir_t = torch.as_tensor(shared_xy_dir, dtype=xy_dirs.dtype, device=xy_dirs.device)
+            xy_dirs = torch.cat([xy_dirs, shared_xy_dir_t], dim=0)
+            print("xy_dirs after concatenation", xy_dirs.shape)
+        elif robot_2:
+            pass
 
         angle_groups = []
 

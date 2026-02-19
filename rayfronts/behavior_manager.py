@@ -33,7 +33,7 @@ class BehaviorManager:
                 self.behavior_mode = behavior.name
                 return
     
-    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict):
+    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir):
         if behavior_mode == 'Frontier-based':
             wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
@@ -41,7 +41,7 @@ class BehaviorManager:
             wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Ray-based':
-            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
+            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir)
             return wp_locked, tw1, tw2
         # elif behavior_mode == 'Ray-Gradient-based':
         #     wp_locked, tw1, tw2 = self.ray_gradient_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
