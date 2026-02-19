@@ -86,18 +86,25 @@ class RayBehavior:
         valid_mask = dot > 0
 
         xy_dirs_np_normed = xy_dirs_np_normed[valid_mask]
+        valid_mask_t = torch.from_numpy(valid_mask).to(device=orig_world.device)
+        orig_world = orig_world[valid_mask_t]
+        dir_world = dir_world[valid_mask_t]
+
+        local_ray_count = xy_dirs_np_normed.shape[0]
+        xy_dirs_for_grouping = xy_dirs_np_normed
 
         robot_topic = getattr(path_publisher, "topic_name", "")
         robot_1 = "/robot_1/" in robot_topic or robot_topic.startswith("/robot_1")
         robot_2 = "/robot_2/" in robot_topic or robot_topic.startswith("/robot_2")
 
-        if robot_1:
-            print("==========================")
-            print("xy_dirs before concatenation", xy_dirs.shape)
-            print("shared_xy_dir", len(shared_xy_dir))
-            shared_xy_dir_t = torch.as_tensor(shared_xy_dir, dtype=xy_dirs.dtype, device=xy_dirs.device)
-            xy_dirs = torch.cat([xy_dirs, shared_xy_dir_t], dim=0)
-            print("xy_dirs after concatenation", xy_dirs.shape)
+        if robot_1 and len(shared_xy_dir) > 0:
+            shared_xy_dir_np = np.asarray(shared_xy_dir, dtype=xy_dirs_for_grouping.dtype)
+            if shared_xy_dir_np.ndim == 1:
+                shared_xy_dir_np = shared_xy_dir_np.reshape(1, -1)
+            shared_xy_dir_np = shared_xy_dir_np[:, :2]
+            shared_norm = np.linalg.norm(shared_xy_dir_np, axis=1, keepdims=True)
+            shared_xy_dir_np = shared_xy_dir_np / np.clip(shared_norm, 1e-8, None)
+            xy_dirs_for_grouping = np.concatenate([xy_dirs_for_grouping, shared_xy_dir_np], axis=0)
         elif robot_2:
             pass
 
@@ -106,7 +113,7 @@ class RayBehavior:
         #45 degree as a bin for grouping rays
         angle_threshold_cos = np.cos(np.deg2rad(45))
 
-        for i, xy_dir in enumerate(xy_dirs_np_normed):
+        for i, xy_dir in enumerate(xy_dirs_for_grouping):
             assigned = False
             for group in angle_groups:
                 dot = np.dot(xy_dir, group['centroid'])
@@ -129,7 +136,9 @@ class RayBehavior:
 
         group_averages = []
         for group in angle_groups:
-            group_idx = group['indices']
+            group_idx = [idx for idx in group['indices'] if idx < local_ray_count]
+            if len(group_idx) == 0:
+                continue
             group_origins = orig_world[group_idx]
             group_directions = dir_world[group_idx]
 
@@ -233,7 +242,14 @@ class RayBehavior:
         
         path_publisher.publish(path)
 
-        self.visualize_filtered_rays(angle_groups, dir_world, orig_world, publisher_dict)
+        angle_groups_local = []
+        for group in angle_groups:
+            local_idx = [idx for idx in group['indices'] if idx < local_ray_count]
+            if len(local_idx) == 0:
+                continue
+            angle_groups_local.append({'indices': local_idx})
+
+        self.visualize_filtered_rays(angle_groups_local, dir_world, orig_world, publisher_dict)
         
         if np.linalg.norm(cur_pose_np - target_waypoint2) < 4.0:
             waypoint_locked = False
