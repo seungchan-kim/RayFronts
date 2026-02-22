@@ -6,6 +6,7 @@ import numpy as np
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
+from std_msgs.msg import Float32MultiArray
 
 class RayBehavior:
     def __init__(self, get_clock):
@@ -27,7 +28,6 @@ class RayBehavior:
             label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
             #print(queries_labels['text'])
             ray_feat = mapper.global_rays_feat
-            #print("ray_feat", ray_feat.shape)
             ray_orig_angles = mapper.global_rays_orig_angles  
             if ray_feat is not None and ray_orig_angles is not None and ray_feat.shape[0] > 0:
                 #print("ray_feat", ray_feat.shape)
@@ -41,10 +41,11 @@ class RayBehavior:
 
                 if queries_feats is not None:
                     ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
-                    #print("ray_scores", ray_scores)
+                    print("ray_scores", ray_scores)
                     threshold = 0.95
 
                     relevant_scores = ray_scores[:,label_indices]
+                    self.relevant_scores = relevant_scores
                     mask = (relevant_scores > threshold).any(dim=1)
                     indices = mask.nonzero(as_tuple=True)[0]
                     #indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
@@ -56,8 +57,9 @@ class RayBehavior:
 
         return False
     
-    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir):
+    def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, shared_best_group_dir):
         path_publisher = publisher_dict['path']
+        r1_best_group_pub = publisher_dict.get('best_group')
         cur_pose_np = point3d_dict['cur_pose']
         target_waypoint1 = point3d_dict['target1']
         target_waypoint2 = point3d_dict['target2']
@@ -97,7 +99,8 @@ class RayBehavior:
         robot_1 = "/robot_1/" in robot_topic or robot_topic.startswith("/robot_1")
         robot_2 = "/robot_2/" in robot_topic or robot_topic.startswith("/robot_2")
 
-        if robot_1 and len(shared_xy_dir) > 0:
+        if len(shared_xy_dir) > 0:
+            #print("shgared_xy_dir", shared_xy_dir)
             shared_xy_dir_np = np.asarray(shared_xy_dir, dtype=xy_dirs_for_grouping.dtype)
             if shared_xy_dir_np.ndim == 1:
                 shared_xy_dir_np = shared_xy_dir_np.reshape(1, -1)
@@ -105,7 +108,9 @@ class RayBehavior:
             shared_norm = np.linalg.norm(shared_xy_dir_np, axis=1, keepdims=True)
             shared_xy_dir_np = shared_xy_dir_np / np.clip(shared_norm, 1e-8, None)
             xy_dirs_for_grouping = np.concatenate([xy_dirs_for_grouping, shared_xy_dir_np], axis=0)
-        elif robot_2:
+        
+        rob_1_selected = None
+        if robot_2:
             pass
 
         angle_groups = []
@@ -114,6 +119,8 @@ class RayBehavior:
         angle_threshold_cos = np.cos(np.deg2rad(45))
 
         for i, xy_dir in enumerate(xy_dirs_for_grouping):
+            #print("==========================================")
+            #print("xy_dris_for_grouping", xy_dirs_for_grouping.shape)
             assigned = False
             for group in angle_groups:
                 dot = np.dot(xy_dir, group['centroid'])
@@ -136,6 +143,7 @@ class RayBehavior:
 
         group_averages = []
         for group in angle_groups:
+            #print("group['indices']", group['indices'])
             group_idx = [idx for idx in group['indices'] if idx < local_ray_count]
             if len(group_idx) == 0:
                 continue
@@ -148,19 +156,52 @@ class RayBehavior:
 
             density = len(group['rays'])
 
-            group_averages.append((avg_origin, avg_direction, density))
+            if hasattr(self, 'relevant_scores') and self.relevant_scores is not None:
+                group_probs = self.relevant_scores[group_idx]
+                avg_probability = group_probs.mean().item()
+            else:
+                avg_probability = 0.0
+
+            group_averages.append((avg_origin, avg_direction, density, avg_probability))
         
-        #sort the angle group averages by the distance from the current pose of robot
-        k = 5.0
-        scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
+        #sort the angle group averages by the distance from the current pose of robot, density, and probability
+        k_density = 5.0
+        k_prob = 10.0
+        scored_groups = sorted(
+            group_averages,
+            key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k_density * g[2] - k_prob * g[3]
+        )
         print("scored_groups", scored_groups)
 
         if not scored_groups:
-            print("No valid ray groups found (all below MIN_RAYS_PER_GROUP)")
             best_group = None
             return waypoint_locked, target_waypoint1, target_waypoint2
         else:
             best_group = scored_groups[0]
+            print("=========================")
+            print(type(best_group))
+            if robot_2 and shared_best_group_dir is not None:
+                r1_dir = np.asarray(shared_best_group_dir, dtype=np.float32)
+                r1_norm = np.linalg.norm(r1_dir)
+                best_dir_xy = best_group[1][:2].detach().cpu().numpy()
+                best_norm = np.linalg.norm(best_dir_xy)
+                if r1_norm > 1e-8 and best_norm > 1e-8:
+                    r1_dir = r1_dir / r1_norm
+                    print("r1_dir", r1_dir)
+                    print("best_dir_xy", best_dir_xy)
+                    best_dir_xy = best_dir_xy / best_norm
+                    pos = 1
+                    while np.dot(r1_dir, best_dir_xy) >= angle_threshold_cos and len(scored_groups) > 1:
+                        best_group = scored_groups[pos]
+                        pos += 1
+                        if pos >= len(scored_groups):
+                            best_group = None
+                            break
+                    
+
+
+            if robot_1 and r1_best_group_pub is not None:
+                self.publish_best_group(best_group, r1_best_group_pub)
 
         magnitude = 6.0
 
@@ -255,6 +296,26 @@ class RayBehavior:
             waypoint_locked = False
 
         return waypoint_locked, target_waypoint1, target_waypoint2
+
+    def publish_best_group(self, best_group, best_group_publisher):
+        best_origin, best_direction, best_density = best_group[:3]
+        origin_np = best_origin.detach().cpu().numpy()
+        direction_np = best_direction.detach().cpu().numpy()
+        direction_norm = np.linalg.norm(direction_np)
+        if direction_norm <= 1e-8:
+            return
+        direction_np = direction_np / direction_norm
+        msg = Float32MultiArray()
+        msg.data = [
+            float(origin_np[0]),
+            float(origin_np[1]),
+            float(origin_np[2]),
+            float(direction_np[0]),
+            float(direction_np[1]),
+            float(direction_np[2]),
+            float(best_density),
+        ]
+        best_group_publisher.publish(msg)
 
     def visualize_filtered_rays(self, angle_groups, dir_world, orig_world, publisher_dict):
         filtered_rays_publisher = publisher_dict['filtered_rays']

@@ -1,4 +1,4 @@
 tree
 sky
-house
+road
 parking lot

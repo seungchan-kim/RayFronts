@@ -19,7 +19,7 @@ import threading
 import signal
 from enum import Enum
 from functools import partial
-from std_msgs.msg import String
+from std_msgs.msg import String, Float32MultiArray
 from typing_extensions import List
 import json
 
@@ -82,7 +82,10 @@ class MappingServer(Node):
     ros_domain_id = os.getenv("ROS_DOMAIN_ID", "0").strip()
     if not ros_domain_id:
       ros_domain_id = "0"
+    self.robot_id = ros_domain_id
     self.robot_topic_prefix = f"/robot_{ros_domain_id}"
+
+
 
     self.path_publisher = self.create_publisher(
       Path, self._robot_topic('global_plan'), 10)
@@ -94,8 +97,13 @@ class MappingServer(Node):
 
     self.viewpoint_publisher = self.create_publisher(
       PointCloud2, self._robot_topic("frontier_viewpoints"), 10)
+    
+      #if robot 1 then creat pub for best group
+    self.best_group_publisher = self.create_publisher(
+      Float32MultiArray, self._robot_topic('best_group'), 10)
 
-    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher}
+
+    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher, 'best_group': self.best_group_publisher}
     logger.info(
       "ROS_DOMAIN_ID=%s | publishing to: %s, %s, %s, %s",
       ros_domain_id,
@@ -121,9 +129,29 @@ class MappingServer(Node):
     self._background_objects = []
     self._target_objects = []
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
-    self.filter_rays_subscriber = self.create_subscription(MarkerArray, '/robot_2/filtered_rays/transposed', self.filter_rays_callback, 10)
     self.shared_xy_dir = []
-    self.subscriber_dict = {'filter_rays': self.filter_rays_subscriber}
+    self.shared_best_group_dir = None
+
+    peer_robot_id = None
+    if self.robot_id == "1":
+      peer_robot_id = "2"
+    elif self.robot_id == "2":
+      peer_robot_id = "1"
+
+    if peer_robot_id is not None:
+      peer_filter_topic = f"/robot_{peer_robot_id}/filtered_rays/transposed"
+      self.filter_rays_subscriber = self.create_subscription(
+        MarkerArray, peer_filter_topic, self.filter_rays_callback, 10)
+      self.subscriber_dict['filter_rays'] = self.filter_rays_subscriber
+    else:
+      self.filter_rays_subscriber = None
+
+    if self.robot_id == "2":
+      self.best_group_subscriber = self.create_subscription(
+        Float32MultiArray, '/robot_1/best_group', self.best_group_callback, 10)
+      self.subscriber_dict['best_group'] = self.best_group_subscriber
+    else:
+      self.best_group_subscriber = None
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -201,7 +229,8 @@ class MappingServer(Node):
 
     self._query_lock = threading.RLock()
 
-    self._target_objects = ['red building', 'fuel tank']
+    self._target_objects = ['red building', 'water tower']
+    #self._target_objects=['house']
 
     for i in range(len(self._target_objects)):
       self.add_queries(self._target_objects[i])
@@ -404,8 +433,18 @@ class MappingServer(Node):
       #self.mode_text_visualizer.modeTextVisualize(cur_pose_np, self._target_objects, self.behavior_mode)
 
       point3d_dict = {'cur_pose': cur_pose_np, 'target1': self.target_waypoint, 'target2': self.target_waypoint2}
+      r1_best_group_for_behavior = self.shared_best_group_dir if self.robot_id == "2" else None
 
-      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(self.behavior_mode, self.mapper, point3d_dict, self.waypoint_locked, self.publisher_dict, self.subscriber_dict, self.shared_xy_dir) 
+      self.waypoint_locked, self.target_waypoint, self.target_waypoint2 = self.behavior_manager.behavior_execute(
+        self.behavior_mode,
+        self.mapper,
+        point3d_dict,
+        self.waypoint_locked,
+        self.publisher_dict,
+        self.subscriber_dict,
+        self.shared_xy_dir,
+        r1_best_group_for_behavior,
+      )
       
 
       if self.vis is not None:
@@ -525,6 +564,14 @@ class MappingServer(Node):
         x_dir = marker.points[1].x - marker.points[0].x
         y_dir = marker.points[1].y - marker.points[0].y
         self.shared_xy_dir.append((x_dir, y_dir))
+
+  def best_group_callback(self, msg: Float32MultiArray):
+    self.shared_best_group_dir = None
+    if len(msg.data) < 6:
+      return
+    x_dir = msg.data[3]
+    y_dir = msg.data[4]
+    self.shared_best_group_dir = (x_dir, y_dir)
 
 
   def clear_filtered_rays(self):
