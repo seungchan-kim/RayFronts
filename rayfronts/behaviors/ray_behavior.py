@@ -160,58 +160,9 @@ class RayBehavior:
         if robot_2:
             pass
 
-        # =====================================================================
-        # ORIGINAL grouping (commented out — kept for comparison)
-        # Groups rays by 45° angle bins regardless of which target they point to.
-        # =====================================================================
-        # angle_groups = []
-        # angle_threshold_cos = np.cos(np.deg2rad(45))
-        # for i, xy_dir in enumerate(xy_dirs_for_grouping):
-        #     assigned = False
-        #     for group in angle_groups:
-        #         dot = np.dot(xy_dir, group['centroid'])
-        #         if dot >= angle_threshold_cos:
-        #             group['indices'].append(i)
-        #             group['rays'].append(xy_dir)
-        #             group['centroid'] = np.mean(group['rays'], axis=0)
-        #             group['centroid'] /= np.linalg.norm(group['centroid'])
-        #             assigned = True
-        #             break
-        #     if not assigned:
-        #         angle_groups.append({
-        #             'centroid': xy_dir,
-        #             'rays': [xy_dir],
-        #             'indices': [i]
-        #         })
-        # MIN_RAYS_PER_GROUP = 1
-        # angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
-        # group_averages = []
-        # for group in angle_groups:
-        #     group_idx = [idx for idx in group['indices'] if idx < local_ray_count]
-        #     if len(group_idx) == 0:
-        #         continue
-        #     group_origins = orig_world[group_idx]
-        #     group_directions = dir_world[group_idx]
-        #     avg_origin = group_origins.mean(dim=0)
-        #     avg_direction = group_directions.mean(dim=0)
-        #     avg_direction = avg_direction / avg_direction.norm()
-        #     density = len(group['rays'])
-        #     group_averages.append((avg_origin, avg_direction, density))
-        # k = 5.0
-        # scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
-        # =====================================================================
-
-        # =====================================================================
-        # NEW grouping: cluster by query/target label, then by spatial proximity.
-        # Each ray is first assigned to its best-matching target, then rays of
-        # the same target that point in similar directions (within ~45°) are
-        # merged into one spatial cluster.  This lets robot_2 simply skip any
-        # cluster whose target label matches what robot_1 is already pursuing.
-        # Tuple layout: (avg_origin, avg_direction, density, target_label)
-        # =====================================================================
         angle_threshold_cos = np.cos(np.deg2rad(45))
 
-        # --- assign each local ray to its best target label ---
+        #assign each local ray to its best target label
         per_ray_target = []
         for i in range(local_ray_count):
             global_ray_idx = self.indices[valid_local_to_query_idx[i]]
@@ -220,7 +171,7 @@ class RayBehavior:
             best_label = self.target_objects[best_target_idx] if self.target_objects else 'unknown'
             per_ray_target.append(best_label)
 
-        # --- greedy spatial clustering within each target label ---
+        #greedy spatial clustering within each target label 
         target_spatial_groups = []  # {centroid, rays, indices, target_label}
         for local_idx in range(local_ray_count):
             xy_dir = xy_dirs_np_normed[local_idx]
@@ -250,7 +201,7 @@ class RayBehavior:
 
         group_averages = []
         for group in target_spatial_groups:
-            group_idx = group['indices']   # already all local (< local_ray_count)
+            group_idx = group['indices']
             if len(group_idx) == 0:
                 continue
             idx_t = torch.tensor(group_idx, dtype=torch.long, device=orig_world.device)
@@ -264,41 +215,11 @@ class RayBehavior:
 
         k = 5.0
         scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k * g[2])
-        # =====================================================================
 
         if not scored_groups:
             best_group = None
             return waypoint_locked, target_waypoint1, target_waypoint2
         else:
-            # =====================================================================
-            # ORIGINAL robot_2 avoidance (commented out — kept for comparison)
-            # Skips the top-scored group if its XY direction is too similar to
-            # robot_1's best group direction (shared via shared_best_group_dir).
-            # =====================================================================
-            # best_group = scored_groups[0]
-            # if robot_2 and shared_best_group_dir is not None:
-            #     r1_dir = np.asarray(shared_best_group_dir, dtype=np.float32)
-            #     r1_norm = np.linalg.norm(r1_dir)
-            #     best_dir_xy = best_group[1][:2].detach().cpu().numpy()
-            #     best_norm = np.linalg.norm(best_dir_xy)
-            #     if r1_norm > 1e-8 and best_norm > 1e-8:
-            #         r1_dir = r1_dir / r1_norm
-            #         best_dir_xy = best_dir_xy / best_norm
-            #         pos = 1
-            #         while np.dot(r1_dir, best_dir_xy) >= angle_threshold_cos and len(scored_groups) > 1:
-            #             best_group = scored_groups[pos]
-            #             pos += 1
-            #             if pos >= len(scored_groups):
-            #                 best_group = None
-            #                 break
-            # =====================================================================
-
-            # =====================================================================
-            # NEW robot_2 avoidance: skip any group whose target label matches
-            # the target robot_1 is already pursuing.  Because rays are clustered
-            # per-target this is now a clean label comparison rather than a
-            # direction-similarity heuristic.
-            # =====================================================================
             best_group = scored_groups[0]
             if robot_2 and self.other_robot_target is not None:
                 alt_groups = [g for g in scored_groups if g[3] != self.other_robot_target]
@@ -309,9 +230,6 @@ class RayBehavior:
                 else:
                     best_group = None
                     return waypoint_locked, target_waypoint1, target_waypoint2
-            # =====================================================================
-
-            # best_group publishing removed
 
         magnitude = 6.0
 
@@ -319,36 +237,6 @@ class RayBehavior:
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
 
-        #prev_target = cur_pose_np
-        # for ii, (avg_origin, avg_direction) in enumerate(group_averages):
-        #     origin_np = avg_origin.cpu().numpy()
-        #     direction_np = avg_direction.cpu().numpy()
-
-        #     origin = origin_np
-        #     direction = direction_np / np.linalg.norm(direction_np)
-
-        #     mid_pose_np = (prev_target + origin) / 2.0
-        #     mid_pose = PoseStamped()
-        #     mid_pose.header.stamp = self.get_clock().now().to_msg()
-        #     mid_pose.header.frame_id = 'map'
-        #     mid_pose.pose.position.x = float(mid_pose_np[0])
-        #     mid_pose.pose.position.y = float(mid_pose_np[1])
-        #     mid_pose.pose.position.z = float(mid_pose_np[2])
-        #     mid_pose.pose.orientation.w = 1.0
-        #     path.poses.append(mid_pose)
-
-        #     target = origin + direction * magnitude
-        #     for factor in [0.0, 1.0]:
-        #         pose = PoseStamped()
-        #         pose.header.stamp = self.get_clock().now().to_msg()
-        #         pose.header.frame_id = 'map'
-        #         pose.pose.position.x = float(origin[0]) * (1 - factor) + float(target[0]) * factor
-        #         pose.pose.position.y = float(origin[1]) * (1 - factor) + float(target[1]) * factor
-        #         pose.pose.position.z = float(origin[2]) * (1 - factor) + float(target[2]) * factor
-        #         pose.pose.orientation.w = 1.0
-        #         path.poses.append(pose)
-            
-        #     prev_target = target
         best_origin, best_direction = best_group[0], best_group[1]
         best_origin_np = best_origin.cpu().numpy()
         best_direction_np = best_direction.cpu().numpy()
