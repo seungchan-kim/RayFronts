@@ -380,6 +380,10 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
     # to project a smaller number of rays at lower resolution to reduce
     # object semantics leaking at the boundaries.
 
+    print("rgb_img", rgb_img.shape)
+    print("depth_img", depth_img.shape)
+    print("pose_4x4", pose_4x4.shape)
+
     r = g3d.depth_to_sparse_occupancy_voxels(
       depth_img, pose_4x4, self.intrinsics_3x3, self.vox_size, conf_map,
       max_num_pts = self.max_pts_per_frame,

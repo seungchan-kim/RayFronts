@@ -16,7 +16,8 @@ class BehaviorManager:
         self.behavior_mode = 'Frontier-based'
         self.get_clock = get_clock
         self.frontier_behavior = FrontierBehavior(self.get_clock)
-        self.ray_behavior = RayBehavior(self.get_clock)
+        current_target_publisher = publisher_dict.get('current_target')
+        self.ray_behavior = RayBehavior(self.get_clock, current_target_publisher)
         #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
         #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.frontier_behavior]
         #self.behaviors = [self.frontier_behavior]
@@ -27,21 +28,28 @@ class BehaviorManager:
         #self.behaviors = [self.frontier_behavior]
         #self.behaviors = [self.lvlm_guided_behavior]
 
-    def mode_select(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
+    def mode_select(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict, other_robot_target=None):
         for behavior in self.behaviors:
-            if behavior.condition_check(queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
-                self.behavior_mode = behavior.name
-                return
+            if behavior.name == 'Ray-based':
+                if behavior.condition_check(queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict, other_robot_target):
+                    self.behavior_mode = behavior.name
+                    return
+            else:
+                if behavior.condition_check(queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
+                    self.behavior_mode = behavior.name
+                    return
     
-    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, shared_best_group_dir):
+    def behavior_execute(self, behavior_mode, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, other_robot_target):
         if behavior_mode == 'Frontier-based':
+            print("FRONTIER-BASED EXPLORATION")
             wp_locked, tw1, tw2 = self.frontier_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Voxel-based' and False:
             wp_locked, tw1, tw2 = self.voxel_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
         elif behavior_mode == 'Ray-based':
-            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, shared_best_group_dir)
+            print("RAY-BASED EXPLORATION")
+            wp_locked, tw1, tw2 = self.ray_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, other_robot_target)
             return wp_locked, tw1, tw2
         # elif behavior_mode == 'Ray-Gradient-based':
         #     wp_locked, tw1, tw2 = self.ray_gradient_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)

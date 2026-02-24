@@ -8,20 +8,28 @@ from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 from std_msgs.msg import Float32MultiArray
 
+from std_msgs.msg import String
+
 class RayBehavior:
-    def __init__(self, get_clock):
+    def __init__(self, get_clock, current_target_publisher=None):
         self.get_clock = get_clock
         self.name = 'Ray-based'
         self.prev_filtered_marker_ids = 0
+        self.current_target = None
+        self.current_target_pub = current_target_publisher
 
-    def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
+    def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict, other_robot_target=None):
+        prev_target = self.current_target
         if queries_labels is None:
+            self.current_target = None
             return False
 
         if queries_labels['text'] is None:
+            self.current_target = None
             return False
         
         if len(target_objects) == 0:
+            self.current_target = None
             return False
         
         if queries_labels is not None and queries_labels['text'] is not None and len(target_objects) > 0:
@@ -41,25 +49,58 @@ class RayBehavior:
 
                 if queries_feats is not None:
                     ray_scores = compute_cos_sim(queries_feats['text'], ray_lang_aligned, softmax=True)
-                    print("ray_scores", ray_scores)
+                    #print("ray_scores", ray_scores)
                     threshold = 0.95
 
                     relevant_scores = ray_scores[:,label_indices]
                     self.relevant_scores = relevant_scores
                     mask = (relevant_scores > threshold).any(dim=1)
                     indices = mask.nonzero(as_tuple=True)[0]
-                    #indices = (ray_scores[:,label_index] > threshold).nonzero(as_tuple=True)[0]
+
                     
+                    self.current_target = None
                     if indices.numel() > 0:
+                        targets_found = []
+                        for idx in indices:
+                            above = (relevant_scores[idx] > threshold).nonzero(as_tuple=True)[0]
+                            if len(above) > 0:
+                                best = relevant_scores[idx][above].argmax().item()
+                                target_label = target_objects[above[best].item()]
+                                targets_found.append(target_label)
+                        if targets_found:
+                            from collections import Counter
+                            robot_2 = False
+                            path_publisher = publisher_dict.get('path')
+                            if path_publisher is not None:
+                                robot_topic = getattr(path_publisher, "topic_name", "")
+                                robot_2 = "/robot_2/" in robot_topic or robot_topic.startswith("/robot_2")
+                            if robot_2 and other_robot_target is not None:
+                                # Remove the target being pursued by robot_1 from candidates
+                                filtered_targets = [t for t in Counter(targets_found).most_common() if t[0] != other_robot_target]
+                                print("Robot 2 detected. Other robot's target:", other_robot_target)
+                                if filtered_targets:
+                                    self.current_target = filtered_targets[0][0]
+                                else:
+                                    # No other valid targets, let go and fallback to frontier
+                                    self.current_target = None
+                                    return False
+                            else:
+                                self.current_target = Counter(targets_found).most_common(1)[0][0]
+                        else:
+                            self.current_target = None
+                        if self.current_target is not None:
+                            print(f"Current target: {self.current_target}")
+                            self.current_target_pub.publish(String(data=self.current_target))
                         self.indices = indices
                         self.ray_orig_angles = ray_orig_angles
                         return True
-
+                    else:
+                        self.current_target = None
+        self.current_target = None
         return False
     
     def execute(self, mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict, shared_xy_dir, shared_best_group_dir):
         path_publisher = publisher_dict['path']
-        r1_best_group_pub = publisher_dict.get('best_group')
         cur_pose_np = point3d_dict['cur_pose']
         target_waypoint1 = point3d_dict['target1']
         target_waypoint2 = point3d_dict['target2']
@@ -154,32 +195,21 @@ class RayBehavior:
             avg_direction = group_directions.mean(dim=0)
             avg_direction = avg_direction / avg_direction.norm()
 
-            density = len(group['rays'])
-
-            if hasattr(self, 'relevant_scores') and self.relevant_scores is not None:
-                group_probs = self.relevant_scores[group_idx]
-                avg_probability = group_probs.mean().item()
-            else:
-                avg_probability = 0.0
-
-            group_averages.append((avg_origin, avg_direction, density, avg_probability))
+            density = len(group['rays'])            
+            group_averages.append((avg_origin, avg_direction, density))
         
-        #sort the angle group averages by the distance from the current pose of robot, density, and probability
-        k_density = 5.0
-        k_prob = 10.0
-        scored_groups = sorted(
-            group_averages,
-            key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k_density * g[2] - k_prob * g[3]
-        )
-        print("scored_groups", scored_groups)
+        #sort the angle group averages by the distance from the current pose of robot
+        k = 5.0
+        scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
+        #print("scored_groups", scored_groups)
 
         if not scored_groups:
             best_group = None
             return waypoint_locked, target_waypoint1, target_waypoint2
         else:
             best_group = scored_groups[0]
-            print("=========================")
-            print(type(best_group))
+            #print("=========================")
+            #print(type(best_group))
             if robot_2 and shared_best_group_dir is not None:
                 r1_dir = np.asarray(shared_best_group_dir, dtype=np.float32)
                 r1_norm = np.linalg.norm(r1_dir)
@@ -187,8 +217,8 @@ class RayBehavior:
                 best_norm = np.linalg.norm(best_dir_xy)
                 if r1_norm > 1e-8 and best_norm > 1e-8:
                     r1_dir = r1_dir / r1_norm
-                    print("r1_dir", r1_dir)
-                    print("best_dir_xy", best_dir_xy)
+                    #print("r1_dir", r1_dir)
+                    #print("best_dir_xy", best_dir_xy)
                     best_dir_xy = best_dir_xy / best_norm
                     pos = 1
                     while np.dot(r1_dir, best_dir_xy) >= angle_threshold_cos and len(scored_groups) > 1:
@@ -200,8 +230,7 @@ class RayBehavior:
                     
 
 
-            if robot_1 and r1_best_group_pub is not None:
-                self.publish_best_group(best_group, r1_best_group_pub)
+            # best_group publishing removed
 
         magnitude = 6.0
 
@@ -297,25 +326,7 @@ class RayBehavior:
 
         return waypoint_locked, target_waypoint1, target_waypoint2
 
-    def publish_best_group(self, best_group, best_group_publisher):
-        best_origin, best_direction, best_density = best_group[:3]
-        origin_np = best_origin.detach().cpu().numpy()
-        direction_np = best_direction.detach().cpu().numpy()
-        direction_norm = np.linalg.norm(direction_np)
-        if direction_norm <= 1e-8:
-            return
-        direction_np = direction_np / direction_norm
-        msg = Float32MultiArray()
-        msg.data = [
-            float(origin_np[0]),
-            float(origin_np[1]),
-            float(origin_np[2]),
-            float(direction_np[0]),
-            float(direction_np[1]),
-            float(direction_np[2]),
-            float(best_density),
-        ]
-        best_group_publisher.publish(msg)
+
 
     def visualize_filtered_rays(self, angle_groups, dir_world, orig_world, publisher_dict):
         filtered_rays_publisher = publisher_dict['filtered_rays']

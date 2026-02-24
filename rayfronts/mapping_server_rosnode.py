@@ -97,13 +97,17 @@ class MappingServer(Node):
 
     self.viewpoint_publisher = self.create_publisher(
       PointCloud2, self._robot_topic("frontier_viewpoints"), 10)
-    
-      #if robot 1 then creat pub for best group
-    self.best_group_publisher = self.create_publisher(
-      Float32MultiArray, self._robot_topic('best_group'), 10)
 
+    self.current_target_publisher = self.create_publisher(
+      String, self._robot_topic('current_target'), 10)
 
-    self.publisher_dict = {'path': self.path_publisher, 'voxel_bbox': self.voxel_bbox_publisher, 'viewpoint': self.viewpoint_publisher, 'filtered_rays': self.filtered_rays_publisher, 'best_group': self.best_group_publisher}
+    self.publisher_dict = {
+      'path': self.path_publisher,
+      'voxel_bbox': self.voxel_bbox_publisher,
+      'viewpoint': self.viewpoint_publisher,
+      'filtered_rays': self.filtered_rays_publisher,
+      'current_target': self.current_target_publisher
+    }
     logger.info(
       "ROS_DOMAIN_ID=%s | publishing to: %s, %s, %s, %s",
       ros_domain_id,
@@ -129,7 +133,9 @@ class MappingServer(Node):
     self._background_objects = []
     self._target_objects = []
     self.create_subscription(String, '/input_prompt', self.target_object_callback, 10)
+
     self.shared_xy_dir = []
+    self.other_robot_target = None
     self.shared_best_group_dir = None
 
     peer_robot_id = None
@@ -142,16 +148,14 @@ class MappingServer(Node):
       peer_filter_topic = f"/robot_{peer_robot_id}/filtered_rays/transposed"
       self.filter_rays_subscriber = self.create_subscription(
         MarkerArray, peer_filter_topic, self.filter_rays_callback, 10)
+      peer_target_topic = f"/robot_{peer_robot_id}/current_target"
+      self.current_topic_sub = self.create_subscription(String, peer_target_topic, self.current_target_callback, 10)
       self.subscriber_dict['filter_rays'] = self.filter_rays_subscriber
-    else:
+      self.subscriber_dict['current_target'] = self.current_topic_sub
       self.filter_rays_subscriber = None
+      self.current_topic_sub = None
 
-    if self.robot_id == "2":
-      self.best_group_subscriber = self.create_subscription(
-        Float32MultiArray, '/robot_1/best_group', self.best_group_callback, 10)
-      self.subscriber_dict['best_group'] = self.best_group_subscriber
-    else:
-      self.best_group_subscriber = None
+
 
     intrinsics_3x3 = self.dataset.intrinsics_3x3
     if "vox_size" in cfg.mapping:
@@ -419,11 +423,12 @@ class MappingServer(Node):
 
       #Behavior Manager selects behavior mode
       self.behavior_manager.mode_select(queries_labels=self._queries_labels,
-                                        target_objects=self._target_objects,  
-                                        queries_feats=self._queries_feats, 
-                                        mapper=self.mapper, 
-                                        publisher_dict=self.publisher_dict, 
-                                        subscriber_dict=self.subscriber_dict)
+                    target_objects=self._target_objects,  
+                    queries_feats=self._queries_feats, 
+                    mapper=self.mapper, 
+                    publisher_dict=self.publisher_dict, 
+                    subscriber_dict=self.subscriber_dict,
+                    other_robot_target=self.other_robot_target)
       
       if self.behavior_mode != self.behavior_manager.behavior_mode:
         self.mode_switch_trigger()
@@ -564,14 +569,13 @@ class MappingServer(Node):
         x_dir = marker.points[1].x - marker.points[0].x
         y_dir = marker.points[1].y - marker.points[0].y
         self.shared_xy_dir.append((x_dir, y_dir))
+  
+  def current_target_callback(self, msg: String):
+    target = msg.data.strip().lower()
+    self.other_robot_target = target
+    self.subscriber_dict['peer_current_target_msg'] = target
+    print("Received current target from peer:", target)
 
-  def best_group_callback(self, msg: Float32MultiArray):
-    self.shared_best_group_dir = None
-    if len(msg.data) < 6:
-      return
-    x_dir = msg.data[3]
-    y_dir = msg.data[4]
-    self.shared_best_group_dir = (x_dir, y_dir)
 
 
   def clear_filtered_rays(self):
