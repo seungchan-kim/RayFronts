@@ -17,6 +17,8 @@ class RayBehavior:
         self.prev_filtered_marker_ids = 0
         self.current_target = None
         self.current_target_pub = current_target_publisher
+        self.target_objects = []
+        self.other_robot_target = None
 
     def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict, other_robot_target=None):
         prev_target = self.current_target
@@ -93,6 +95,8 @@ class RayBehavior:
                             self.current_target_pub.publish(String(data=self.current_target))
                         self.indices = indices
                         self.ray_orig_angles = ray_orig_angles
+                        self.target_objects = target_objects
+                        self.other_robot_target = other_robot_target
                         return True
                     else:
                         self.current_target = None
@@ -134,6 +138,8 @@ class RayBehavior:
         dir_world = dir_world[valid_mask_t]
 
         local_ray_count = xy_dirs_np_normed.shape[0]
+        # Maps local ray index (0..local_ray_count-1) back to its position in self.indices
+        valid_local_to_query_idx = np.where(valid_mask)[0]
         xy_dirs_for_grouping = xy_dirs_np_normed
 
         robot_topic = getattr(path_publisher, "topic_name", "")
@@ -154,81 +160,156 @@ class RayBehavior:
         if robot_2:
             pass
 
-        angle_groups = []
+        # =====================================================================
+        # ORIGINAL grouping (commented out — kept for comparison)
+        # Groups rays by 45° angle bins regardless of which target they point to.
+        # =====================================================================
+        # angle_groups = []
+        # angle_threshold_cos = np.cos(np.deg2rad(45))
+        # for i, xy_dir in enumerate(xy_dirs_for_grouping):
+        #     assigned = False
+        #     for group in angle_groups:
+        #         dot = np.dot(xy_dir, group['centroid'])
+        #         if dot >= angle_threshold_cos:
+        #             group['indices'].append(i)
+        #             group['rays'].append(xy_dir)
+        #             group['centroid'] = np.mean(group['rays'], axis=0)
+        #             group['centroid'] /= np.linalg.norm(group['centroid'])
+        #             assigned = True
+        #             break
+        #     if not assigned:
+        #         angle_groups.append({
+        #             'centroid': xy_dir,
+        #             'rays': [xy_dir],
+        #             'indices': [i]
+        #         })
+        # MIN_RAYS_PER_GROUP = 1
+        # angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
+        # group_averages = []
+        # for group in angle_groups:
+        #     group_idx = [idx for idx in group['indices'] if idx < local_ray_count]
+        #     if len(group_idx) == 0:
+        #         continue
+        #     group_origins = orig_world[group_idx]
+        #     group_directions = dir_world[group_idx]
+        #     avg_origin = group_origins.mean(dim=0)
+        #     avg_direction = group_directions.mean(dim=0)
+        #     avg_direction = avg_direction / avg_direction.norm()
+        #     density = len(group['rays'])
+        #     group_averages.append((avg_origin, avg_direction, density))
+        # k = 5.0
+        # scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
+        # =====================================================================
 
-        #45 degree as a bin for grouping rays
+        # =====================================================================
+        # NEW grouping: cluster by query/target label, then by spatial proximity.
+        # Each ray is first assigned to its best-matching target, then rays of
+        # the same target that point in similar directions (within ~45°) are
+        # merged into one spatial cluster.  This lets robot_2 simply skip any
+        # cluster whose target label matches what robot_1 is already pursuing.
+        # Tuple layout: (avg_origin, avg_direction, density, target_label)
+        # =====================================================================
         angle_threshold_cos = np.cos(np.deg2rad(45))
 
-        for i, xy_dir in enumerate(xy_dirs_for_grouping):
-            #print("==========================================")
-            #print("xy_dris_for_grouping", xy_dirs_for_grouping.shape)
+        # --- assign each local ray to its best target label ---
+        per_ray_target = []
+        for i in range(local_ray_count):
+            global_ray_idx = self.indices[valid_local_to_query_idx[i]]
+            ray_scores_i = self.relevant_scores[global_ray_idx]   # [num_targets]
+            best_target_idx = ray_scores_i.argmax().item()
+            best_label = self.target_objects[best_target_idx] if self.target_objects else 'unknown'
+            per_ray_target.append(best_label)
+
+        # --- greedy spatial clustering within each target label ---
+        target_spatial_groups = []  # {centroid, rays, indices, target_label}
+        for local_idx in range(local_ray_count):
+            xy_dir = xy_dirs_np_normed[local_idx]
+            target_label = per_ray_target[local_idx]
             assigned = False
-            for group in angle_groups:
+            for group in target_spatial_groups:
+                if group['target_label'] != target_label:
+                    continue
                 dot = np.dot(xy_dir, group['centroid'])
                 if dot >= angle_threshold_cos:
-                    group['indices'].append(i)
+                    group['indices'].append(local_idx)
                     group['rays'].append(xy_dir)
-                    group['centroid'] = np.mean(group['rays'],axis=0)
+                    group['centroid'] = np.mean(group['rays'], axis=0)
                     group['centroid'] /= np.linalg.norm(group['centroid'])
                     assigned = True
                     break
             if not assigned:
-                angle_groups.append({
-                    'centroid': xy_dir, 
-                    'rays':[xy_dir],
-                    'indices':[i]
-                    })
-        
+                target_spatial_groups.append({
+                    'centroid': xy_dir,
+                    'rays': [xy_dir],
+                    'indices': [local_idx],
+                    'target_label': target_label
+                })
+
         MIN_RAYS_PER_GROUP = 1
-        angle_groups = [g for g in angle_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
+        target_spatial_groups = [g for g in target_spatial_groups if len(g['rays']) >= MIN_RAYS_PER_GROUP]
 
         group_averages = []
-        for group in angle_groups:
-            #print("group['indices']", group['indices'])
-            group_idx = [idx for idx in group['indices'] if idx < local_ray_count]
+        for group in target_spatial_groups:
+            group_idx = group['indices']   # already all local (< local_ray_count)
             if len(group_idx) == 0:
                 continue
-            group_origins = orig_world[group_idx]
-            group_directions = dir_world[group_idx]
-
+            idx_t = torch.tensor(group_idx, dtype=torch.long, device=orig_world.device)
+            group_origins = orig_world[idx_t]
+            group_directions = dir_world[idx_t]
             avg_origin = group_origins.mean(dim=0)
             avg_direction = group_directions.mean(dim=0)
             avg_direction = avg_direction / avg_direction.norm()
+            density = len(group['rays'])
+            group_averages.append((avg_origin, avg_direction, density, group['target_label']))
 
-            density = len(group['rays'])            
-            group_averages.append((avg_origin, avg_direction, density))
-        
-        #sort the angle group averages by the distance from the current pose of robot
         k = 5.0
-        scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k*g[2])
-        #print("scored_groups", scored_groups)
+        scored_groups = sorted(group_averages, key=lambda g: np.linalg.norm(g[0].cpu().numpy() - cur_pose_np) - k * g[2])
+        # =====================================================================
 
         if not scored_groups:
             best_group = None
             return waypoint_locked, target_waypoint1, target_waypoint2
         else:
-            best_group = scored_groups[0]
-            #print("=========================")
-            #print(type(best_group))
-            if robot_2 and shared_best_group_dir is not None:
-                r1_dir = np.asarray(shared_best_group_dir, dtype=np.float32)
-                r1_norm = np.linalg.norm(r1_dir)
-                best_dir_xy = best_group[1][:2].detach().cpu().numpy()
-                best_norm = np.linalg.norm(best_dir_xy)
-                if r1_norm > 1e-8 and best_norm > 1e-8:
-                    r1_dir = r1_dir / r1_norm
-                    #print("r1_dir", r1_dir)
-                    #print("best_dir_xy", best_dir_xy)
-                    best_dir_xy = best_dir_xy / best_norm
-                    pos = 1
-                    while np.dot(r1_dir, best_dir_xy) >= angle_threshold_cos and len(scored_groups) > 1:
-                        best_group = scored_groups[pos]
-                        pos += 1
-                        if pos >= len(scored_groups):
-                            best_group = None
-                            break
-                    
+            # =====================================================================
+            # ORIGINAL robot_2 avoidance (commented out — kept for comparison)
+            # Skips the top-scored group if its XY direction is too similar to
+            # robot_1's best group direction (shared via shared_best_group_dir).
+            # =====================================================================
+            # best_group = scored_groups[0]
+            # if robot_2 and shared_best_group_dir is not None:
+            #     r1_dir = np.asarray(shared_best_group_dir, dtype=np.float32)
+            #     r1_norm = np.linalg.norm(r1_dir)
+            #     best_dir_xy = best_group[1][:2].detach().cpu().numpy()
+            #     best_norm = np.linalg.norm(best_dir_xy)
+            #     if r1_norm > 1e-8 and best_norm > 1e-8:
+            #         r1_dir = r1_dir / r1_norm
+            #         best_dir_xy = best_dir_xy / best_norm
+            #         pos = 1
+            #         while np.dot(r1_dir, best_dir_xy) >= angle_threshold_cos and len(scored_groups) > 1:
+            #             best_group = scored_groups[pos]
+            #             pos += 1
+            #             if pos >= len(scored_groups):
+            #                 best_group = None
+            #                 break
+            # =====================================================================
 
+            # =====================================================================
+            # NEW robot_2 avoidance: skip any group whose target label matches
+            # the target robot_1 is already pursuing.  Because rays are clustered
+            # per-target this is now a clean label comparison rather than a
+            # direction-similarity heuristic.
+            # =====================================================================
+            best_group = scored_groups[0]
+            if robot_2 and self.other_robot_target is not None:
+                alt_groups = [g for g in scored_groups if g[3] != self.other_robot_target]
+                print(f"Robot 2: peer is pursuing '{self.other_robot_target}', "
+                      f"{len(alt_groups)}/{len(scored_groups)} groups remain after filtering")
+                if alt_groups:
+                    best_group = alt_groups[0]
+                else:
+                    best_group = None
+                    return waypoint_locked, target_waypoint1, target_waypoint2
+            # =====================================================================
 
             # best_group publishing removed
 
@@ -312,14 +393,12 @@ class RayBehavior:
         
         path_publisher.publish(path)
 
-        angle_groups_local = []
-        for group in angle_groups:
-            local_idx = [idx for idx in group['indices'] if idx < local_ray_count]
-            if len(local_idx) == 0:
-                continue
-            angle_groups_local.append({'indices': local_idx})
-
-        self.visualize_filtered_rays(angle_groups_local, dir_world, orig_world, publisher_dict)
+        # Build a flat group list for the visualizer.
+        # Each entry just needs {'indices': [local_idx, ...]}.
+        # The new target_spatial_groups already contain only local indices, so
+        # we can use them directly (no need to re-filter by local_ray_count).
+        vis_groups = [{'indices': g['indices']} for g in target_spatial_groups if g['indices']]
+        self.visualize_filtered_rays(vis_groups, dir_world, orig_world, publisher_dict)
         
         if np.linalg.norm(cur_pose_np - target_waypoint2) < 4.0:
             waypoint_locked = False
