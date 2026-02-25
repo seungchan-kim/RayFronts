@@ -79,7 +79,7 @@ class RayBehavior:
                             if robot_2 and other_robot_target is not None:
                                 # Remove the target being pursued by robot_1 from candidates
                                 filtered_targets = [t for t in Counter(targets_found).most_common() if t[0] != other_robot_target]
-                                print("Robot 2 detected. Other robot's target:", other_robot_target)
+                                print("[ROBOT 2]  Avoiding robot 1's target:", other_robot_target)
                                 if filtered_targets:
                                     self.current_target = filtered_targets[0][0]
                                 else:

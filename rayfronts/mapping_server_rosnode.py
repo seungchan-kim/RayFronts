@@ -138,17 +138,17 @@ class MappingServer(Node):
     self.other_robot_target = None
     self.shared_best_group_dir = None
 
-    peer_robot_id = None
+    self.peer_robot_id = None
     if self.robot_id == "1":
-      peer_robot_id = "2"
+      self.peer_robot_id = "2"
     elif self.robot_id == "2":
-      peer_robot_id = "1"
+      self.peer_robot_id = "1"
 
-    if peer_robot_id is not None:
-      peer_filter_topic = f"/robot_{peer_robot_id}/filtered_rays/transposed"
+    if self.peer_robot_id is not None:
+      peer_filter_topic = f"/robot_{self.peer_robot_id}/filtered_rays/transposed"
       self.filter_rays_subscriber = self.create_subscription(
         MarkerArray, peer_filter_topic, self.filter_rays_callback, 10)
-      peer_target_topic = f"/robot_{peer_robot_id}/current_target"
+      peer_target_topic = f"/robot_{self.peer_robot_id}/current_target"
       self.current_topic_sub = self.create_subscription(String, peer_target_topic, self.current_target_callback, 10)
       self.subscriber_dict['filter_rays'] = self.filter_rays_subscriber
       self.subscriber_dict['current_target'] = self.current_topic_sub
@@ -574,7 +574,7 @@ class MappingServer(Node):
     target = msg.data.strip().lower()
     self.other_robot_target = target
     self.subscriber_dict['peer_current_target_msg'] = target
-    print("Received current target from peer:", target)
+    print(f"[ROBOT {self.robot_id}] Received robot {self.peer_robot_id}'s current target: {target}")
 
 
 
