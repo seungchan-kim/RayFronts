@@ -161,11 +161,11 @@ class Ros2MacslamSubscriber(PosedRgbdDataset):
               history=HistoryPolicy.KEEP_LAST,
               depth=1,
           ))
-        self._subs[msg_str].registerCallback(lambda x: print(type(x)))
+        #self._subs[msg_str].registerCallback(lambda x: print(type(x)))
     self._frame_msgs_queue = queue.Queue()
 
     self._time_sync = message_filters.ApproximateTimeSynchronizer(
-      list(self._subs.values()), queue_size = 10, slop = 5,
+      list(self._subs.values()), queue_size = 10, slop = 0.3,
       allow_headerless = False)
     self._time_sync.registerCallback(self._buffer_frame_msgs)
 
@@ -222,7 +222,7 @@ class Ros2MacslamSubscriber(PosedRgbdDataset):
     self._intrinsics_loaded_cond.release()
 
   def _buffer_frame_msgs(self, *msgs):
-    print("hello")
+    #print("hello")
     if self.frame_skip <= 0 or self.f % (self.frame_skip+1) == 0:
       self._frame_msgs_queue.put(msgs)
     self.f += 1
@@ -243,12 +243,14 @@ class Ros2MacslamSubscriber(PosedRgbdDataset):
 
       # Parse RGB
       rgb_img = compressed_image_to_numpy(msgs["rgb"]).astype("float") / 255
-      rgb_img = torch.from_numpy(rgb_img)
+      rgb_img = torch.from_numpy(rgb_img).permute(2, 0, 1).float()
+
+      #print(f">> [A] rgb_image {rgb_img.shape=}")
 
       # Parse Pose
       src_pose_4x4 = torch.tensor(
         pose_to_numpy(msgs["pose"].pose), dtype=torch.float)
-      transform_test = True
+      transform_test = False
       if transform_test:
           pitch = 0.261799
           R_pitch = np.array([[np.cos(pitch),0,np.sin(pitch)],[0,1,0],[-np.sin(pitch),0,np.cos(pitch)]],dtype=np.float32)
@@ -315,11 +317,15 @@ class Ros2MacslamSubscriber(PosedRgbdDataset):
         conf_img = 1 - (torch.tensor(conf_img, dtype=torch.float) / 100)
         conf_img = conf_img.unsqueeze(0)
 
+      #print(f">> [C] rgb_image {rgb_img.shape=}")
+
       if (self.rgb_h != rgb_img.shape[-2] or
           self.rgb_w != rgb_img.shape[-1]):
         rgb_img = torch.nn.functional.interpolate(rgb_img.unsqueeze(0),
           size=(self.rgb_h, self.rgb_w), mode=self.interp_mode,
           antialias=self.interp_mode in ["bilinear", "bicubic"]).squeeze(0)
+
+      #print(f">> [D] rgb_image {rgb_img.shape=}")
 
       if (self.depth_h != depth_img.shape[-2] or
           self.depth_w != depth_img.shape[-1]):
@@ -334,6 +340,7 @@ class Ros2MacslamSubscriber(PosedRgbdDataset):
       if torch.sum(~depth_img.isnan()) == 0:
         logger.warning("Ignoring received depth frame with no valid values")
         continue
+        
       frame_data = dict(rgb_img = rgb_img, depth_img = depth_img,
                         pose_4x4 = rdf_pose_4x4)
 

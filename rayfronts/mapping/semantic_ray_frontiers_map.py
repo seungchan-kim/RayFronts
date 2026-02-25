@@ -374,6 +374,11 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
     # to project a smaller number of rays at lower resolution to reduce
     # object semantics leaking at the boundaries.
 
+    print("rgb_img", rgb_img.shape)
+    print("depth_img", depth_img.shape)
+    print("pose_4x4", pose_4x4.shape)
+    
+
     r = g3d.depth_to_sparse_occupancy_voxels(
       depth_img, pose_4x4, self.intrinsics_3x3, self.vox_size, conf_map,
       max_num_pts = self.max_pts_per_frame,
@@ -492,7 +497,7 @@ class SemanticRayFrontiersMap(SemanticRGBDMapping):
       # TODO: Test if its faster to project boundary points and pose centers
       # instead of doing min max over all tmp voxels. Or maybe let occ_pc2vdb
       # return the bounding box since it will iterate over all voxels already.
-      if updated_vox_xyz.shape[0] > 0:
+      if updated_vox_xyz is not None and updated_vox_xyz.shape[0] > 0:
         active_bbox_min = torch.min(updated_vox_xyz, dim = 0).values
         active_bbox_max = torch.max(updated_vox_xyz, dim = 0).values
         self.update_frontiers(active_bbox_min, active_bbox_max)

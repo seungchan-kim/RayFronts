@@ -348,7 +348,7 @@ class MappingServer(Node):
       map_t1 = time.time()
 
       #behavior manager selects mode
-      self.behavior_manager.mode_select(queries_labels=self._queries_labels,target_objects = self._target_objects, queries_feats = self._queries_feats, mapper=self.mapper, publisher_dict=self.publisher_dict, subscriber=self.subscriber_dict)
+      self.behavior_manager.mode_select(queries_labels=self._queries_labels,target_object= self._target_objects, queries_feats = self._queries_feats, mapper=self.mapper, publisher_dict=self.publisher_dict, subscriber_dict=self.subscriber_dict)
 
       if self.behavior_mode != self.behavior_manager.behavior_mode:
           self.mode_switch_trigger()
