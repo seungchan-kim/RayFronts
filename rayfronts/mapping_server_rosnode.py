@@ -233,7 +233,7 @@ class MappingServer(Node):
 
     self._query_lock = threading.RLock()
 
-    self._target_objects = ['red building', 'water tower']
+    self._target_objects = ['red building', 'water tower', 'radio tower']
     #self._target_objects=['house']
 
     for i in range(len(self._target_objects)):
