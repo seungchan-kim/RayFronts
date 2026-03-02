@@ -8,6 +8,6 @@ docker run -it \
 	--runtime=nvidia \
 	-e NVIDIA_DRIVER_CAPABILITIES=all \
 	-e ROS_DOMAIN_ID=1 \
-	-v ~/RayFronts:/workspace/RayFronts \
+	-v ~/RAVEN/RayFronts:/workspace/RayFronts \
 	-w /workspace/RayFronts \
-	rayfronts:desktop-models
+	rayfronts:desktop

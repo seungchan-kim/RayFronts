@@ -2,9 +2,9 @@
   for Online Scene Understanding and Exploration</h1>
 
 <p align="center">
-  <a href="https://www.linkedin.com/in/omaralama/"><strong>Omar Alama</strong></a>
+  <a href="https://oasisartisan.github.io/"><strong>Omar Alama</strong></a>
   .
-  <a href="https://www.linkedin.com/in/avigyan-bhattacharya"><strong>Avigyan Bhattacharya</strong></a>
+  <a href="https://avigyanbh.github.io/"><strong>Avigyan Bhattacharya</strong></a>
   ·
   <a href="https://purenothingness24.github.io/"><strong>Haoyang He</strong></a>
   ·
@@ -38,6 +38,6 @@ Build the image with:
 
 After building the `rayfronts:desktop` docker image, run
 
-    docker run -it --gpus all --network host --ipc host --privileged --runtime=nvidia -e NVIDIA_DRIVER_CAPABILITIES=all -v ~/RayFronts:/workspace/RayFronts -w /workspace/RayFronts rayfronts:desktop
+    ./run_docker.sh
 
 Then, build CPP extension one time by running `./compile.sh`
