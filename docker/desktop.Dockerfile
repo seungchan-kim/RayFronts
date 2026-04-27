@@ -46,7 +46,8 @@ RUN pip install \
   transformers \
   idna==3.10 \
   requests==2.32.3 \
-  pandas
+  pandas \
+  scikit-learn
 
 ## Compile & install patched open-vdb (Need open-vdb 12.0 that exposes Int8Grid to python)
 
