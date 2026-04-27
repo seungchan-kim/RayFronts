@@ -10,7 +10,7 @@ rgb_topic: "/robot_1/sensors/front_stereo/left/image_rect"
 pose_topic: "/robot_1/odometry_conversion/odometry"
 
 # Topic containing depth images of type .
-depth_topic: "/robot_1/sensors/front_stereo/left/depth"
+depth_topic: "/robot_1/sensors/front_stereo/left/depth_ground_truth"
 
 # Topic containing intrinsics information from messages
 # of type sensor_msgs/msg/CameraInfo. Will be used at initialization only.
