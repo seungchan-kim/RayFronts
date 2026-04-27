@@ -25,10 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ## Install python dependencies
 RUN pip install \
-  torch==2.4.1 \
-  torchvision==0.19.1 \
-  torchaudio==2.4.1 \
-  --index-url https://download.pytorch.org/whl/cu121
+  torch==2.9.1 \
+  torchvision \
+  torchaudio \
+  --index-url https://download.pytorch.org/whl/cu130
 
 RUN pip install \
   protobuf \
@@ -36,18 +36,20 @@ RUN pip install \
   scipy==1.15.2 \
   rerun-sdk==0.22.0 \
   einops \
-  timm \
+  timm==0.9.16 \
   torch-scatter==2.1.2 \
   ftfy \
   regex \
   nanobind \
   hydra-core \
   open_clip_torch \
-  transformers \
+  "transformers<5" \
   idna==3.10 \
   requests==2.32.3 \
   pandas \
-  scikit-learn
+  scikit-learn \
+  scikit-image
+
 
 ## Compile & install patched open-vdb (Need open-vdb 12.0 that exposes Int8Grid to python)
 
