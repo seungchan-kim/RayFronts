@@ -1,6 +1,7 @@
 #!/bin/bash
 
-docker run -it \
+docker run -it --rm \
+	--name rayfronts_container \
 	--gpus all \
 	--network host \
 	--ipc host \
