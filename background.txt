@@ -1,0 +1,4 @@
+sky
+ground
+road
+mountain

@@ -7,7 +7,7 @@ import time
 class InputPublisher(Node):
     def __init__(self):
         super().__init__('input_publisher')
-        self.publisher_ = self.create_publisher(String, '/input_text', 10)
+        self.publisher_ = self.create_publisher(String, '/input_prompt', 10)
         self.current_input = ""
         self.running = True
         self.publish_thread = threading.Thread(target=self.publish_loop)

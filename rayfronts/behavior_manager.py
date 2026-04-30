@@ -6,7 +6,6 @@ from rayfronts.behaviors.frontier_behavior import FrontierBehavior
 from rayfronts.behaviors.voxel_behavior import VoxelBehavior
 from rayfronts.behaviors.ray_behavior import RayBehavior
 from rayfronts.behaviors.lvlm_behavior import LvlmBehavior
-#from rayfronts.behaviors.ray_gradient_behavior import RayGradientBehavior
 from rayfronts.utils import compute_cos_sim
 
 from visualization_msgs.msg import Marker, MarkerArray
@@ -21,15 +20,12 @@ class BehaviorManager:
         self.ray_behavior = RayBehavior(self.get_clock)
         self.frontier_behavior = FrontierBehavior(self.get_clock)
         self.lvlm_guided_behavior = LvlmBehavior(self.get_clock, publisher_dict, node)
-        #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
-        #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.frontier_behavior]
-        self.behaviors = [self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior]
-        #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
-        #self.behaviors = [self.ray_behavior, self.frontier_behavior]
-        #self.behaviors = [self.ray_gradient_behavior, self.frontier_behavior]
-        #self.behaviors = [self.voxel_behavior, self.frontier_behavior]
-        #self.behaviors = [self.frontier_behavior]
-        #self.behaviors = [self.lvlm_guided_behavior]
+        # behavior strategies - each behavior should be added in the order of priority (voxel->ray->LVLM->frontier)
+        self.behaviors = [self.voxel_behavior, self.ray_behavior, self.lvlm_guided_behavior, self.frontier_behavior] #full RAVEN
+        #self.behaviors = [self.voxel_behavior, self.ray_behavior, self.frontier_behavior] #no LVLM (ablations)
+        #self.behaviors = [self.voxel_behavior, self.frontier_behavior] # no ray-based search (ablations)
+        #self.behaviors = [self.ray_behavior, self.frontier_behavior] #no voxel-based search (ablations)
+        #self.behaviors = [self.frontier_behavior] # pure frontier-based exploration
 
     def mode_select(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
         for behavior in self.behaviors:
@@ -50,6 +46,3 @@ class BehaviorManager:
         elif behavior_mode == 'LVLM-guided':
             wp_locked, tw1, tw2 = self.lvlm_guided_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict, subscriber_dict)
             return wp_locked, tw1, tw2
-        # elif behavior_mode == 'Ray-Gradient-based':
-        #     wp_locked, tw1, tw2 = self.ray_gradient_behavior.execute(mapper, point3d_dict, waypoint_locked, publisher_dict)
-        #     return wp_locked, tw1, tw2

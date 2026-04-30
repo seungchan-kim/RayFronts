@@ -45,7 +45,7 @@ querying:
   # exists, the query is assumed to be a text query.
   # .json: A dictionary where the query is the key and the value is a hex
   # color such that the query is colorized using that in the visualization.
-  query_file: '/workspace/RayFronts/test.txt'
+  query_file: '/workspace/RayFronts/background.txt'
 
   # Whether softmax probability is computed across queries or not.
   # If you want results to be independent of other queries set this to false.
