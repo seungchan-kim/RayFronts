@@ -31,7 +31,6 @@ class VoxelBehavior:
         
         if queries_labels is not None and queries_labels['text'] is not None and len(target_objects) > 0:
             label_indices = [queries_labels['text'].index(target_object) for target_object in target_objects]
-            #label_index = queries_labels['text'].index(target_object)
             vox_xyz = mapper.global_vox_xyz
             vox_feat = mapper.global_vox_feat
 

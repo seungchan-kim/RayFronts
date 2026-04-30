@@ -1,4 +1,4 @@
-sky
-ground
 road
+grass
 mountain
+parking lot
