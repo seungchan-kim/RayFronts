@@ -190,13 +190,6 @@ class VoxelBehavior:
         path_publisher.publish(path)
 
         print("cur_pose_np - target_waypoint2 distance: ", np.linalg.norm(cur_pose_np - target_waypoint2))
-        # print("min distance to cuboid", self.min_distance_to_cuboid(self.current_target_cluster, cur_pose_np))
-        # if self.min_distance_to_cuboid(self.current_target_cluster, cur_pose_np) < 3.0:
-        #     self.visited_clusters.append(self.current_target_cluster)
-        #     waypoint_locked = False
-        
-        #if random.random() < 0.2:
-        #    waypoint_locked = False
         
         if np.linalg.norm(cur_pose_np - target_waypoint2) < 3.0:
             if sorted_voxel_clusters_by_dist:

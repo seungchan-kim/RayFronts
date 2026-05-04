@@ -36,11 +36,6 @@ class LvlmBehavior:
         print("self.guiding_objects", self.guiding_objects)
         print(f"[LvlmBehavior] Updated objects: {self.guiding_objects}")
 
-        # if cleaned_objects != self.guiding_objects:
-        #     mapping_server_rosnode.delete_queries(self.guiding_objects)
-        #     self.guiding_objects = cleaned_objects
-            
-        #     mapping_server_rosnode.add_queries(self.guiding_objects)
 
     def condition_check(self, queries_labels, target_objects, queries_feats, mapper, publisher_dict, subscriber_dict):
         self.mapping_server_rosnode.add_queries(self.guiding_objects)
@@ -98,12 +93,6 @@ class LvlmBehavior:
         ray_dir = torch.stack(g3d.spherical_to_cartesian(1,ray_angles[:,0],ray_angles[:,1]),dim=-1)
         fo = ray_orig[self.indices]
         fd = ray_dir[self.indices]
-        
-        # orig_world = torch.stack([fo[:,2],-fo[:,0],-fo[:,1]],dim=1)
-        # dir_world = torch.stack([fd[:,2],-fd[:,0],-fd[:,1]],dim=1)
-        # xy_dirs = dir_world[:,:2]
-        # xy_dirs_np = xy_dirs.cpu().numpy()
-        # xy_dirs_np_normed = xy_dirs_np / np.linalg.norm(xy_dirs_np, axis=1, keepdims=True)
 
         mean_origin = torch.mean(fo, dim=0)
         mean_direction = torch.mean(fd, dim=0)

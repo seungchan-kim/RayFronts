@@ -71,9 +71,6 @@ class FrontierBehavior:
             top_indices = torch.argsort(scores)[:num_candidates]
             best_idx = top_indices[torch.randint(0, num_candidates, (1,))]
             best_cent = viewpoints[best_idx].view(-1)
-            #from pdb import set_trace as bp; bp()
-            #best_idx = torch.argsort(scores)[0]
-            #best_cent = viewpoints[best_idx]
 
             path = Path()
             path.header.stamp = self.get_clock().now().to_msg()
@@ -130,18 +127,3 @@ class FrontierBehavior:
             x,y,z = xyz[i]
             points.append([x,y,z])
         return point_cloud2.create_cloud(header, fields, points)
-
-
- ######fixed-grid-based chunking#######
-      #     # chunk_size = 10
-      #     # chunk_indices = (transformed_frontiers / chunk_size).floor().to(torch.int32)
-      #     # unique_chunks, inverse_indices = torch.unique(chunk_indices, dim=0, return_inverse=True)
-      #     # viewpoints = []
-      #     # for i in range(len(unique_chunks)):
-      #     #  mask = (inverse_indices == i)
-      #     #  cluster_points = transformed_frontiers[mask]
-      #     #  centroid = cluster_points.mean(dim=0)
-      #     #  if centroid[2] > 2.0:
-      #     #    viewpoints.append(centroid)
-      #     # viewpoints = torch.stack(viewpoints)
-      #     ###########################

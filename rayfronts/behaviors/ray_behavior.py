@@ -141,35 +141,6 @@ class RayBehavior:
         path = Path()
         path.header.stamp = self.get_clock().now().to_msg()
         path.header.frame_id = "map"
-
-        #prev_target = cur_pose_np
-        # for ii, (avg_origin, avg_direction) in enumerate(group_averages):
-        #     origin_np = avg_origin.cpu().numpy()
-        #     direction_np = avg_direction.cpu().numpy()
-
-        #     origin = origin_np
-        #     direction = direction_np / np.linalg.norm(direction_np)
-
-        #     mid_pose_np = (prev_target + origin) / 2.0
-        #     mid_pose = PoseStamped()
-        #     mid_pose.header.stamp = self.get_clock().now().to_msg()
-        #     mid_pose.header.frame_id = 'map'
-        #     mid_pose.pose.position.x = float(mid_pose_np[0])
-        #     mid_pose.pose.position.y = float(mid_pose_np[1])
-        #     mid_pose.pose.position.z = float(mid_pose_np[2])
-        #     mid_pose.pose.orientation.w = 1.0
-        #     path.poses.append(mid_pose)
-
-        #     target = origin + direction * magnitude
-        #     for factor in [0.0, 1.0]:
-        #         pose = PoseStamped()
-        #         pose.header.stamp = self.get_clock().now().to_msg()
-        #         pose.header.frame_id = 'map'
-        #         pose.pose.position.x = float(origin[0]) * (1 - factor) + float(target[0]) * factor
-        #         pose.pose.position.y = float(origin[1]) * (1 - factor) + float(target[1]) * factor
-        #         pose.pose.position.z = float(origin[2]) * (1 - factor) + float(target[2]) * factor
-        #         pose.pose.orientation.w = 1.0
-        #         path.poses.append(pose)
             
         #     prev_target = target
         best_origin, best_direction = best_group[0], best_group[1]
@@ -187,12 +158,7 @@ class RayBehavior:
         mid_pose.pose.position.y = float(mid_pose_np[1])
         mid_pose.pose.position.z = float(mid_pose_np[2])
         mid_pose.pose.orientation.w = 1.0
-        #path.poses.append(mid_pose)
 
-        #if not waypoint_locked:
-        #    target_waypoint1 = origin
-        #    target_waypoint2 = origin + direction*magnitude
-        #    waypoint_locked = True
         target_waypoint1 = origin + direction*magnitude
         target_waypoint2 = origin + direction*magnitude*2
             
