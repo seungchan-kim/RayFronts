@@ -32,7 +32,7 @@ class MissionChecker(Node):
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/DowntownWest_t_x-120_y0_z0_o_x0_y0_z0.json"
         
         #FireAcademy
-        self.annotation_file = "rayfronts/annotations/transformed_annotations/FireAcademy_t_x0_y0_z0_o_x0_y0_z0.json"
+        #self.annotation_file = "rayfronts/annotations/transformed_annotations/FireAcademy_t_x0_y0_z0_o_x0_y0_z0.json"
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/FireAcademy_t_x30_y30_z1_o_x0_y0_z-90.json"
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/FireAcademy_t_x-15_y0_z0_o_x0_y0_z-90.json"
         
@@ -47,7 +47,7 @@ class MissionChecker(Node):
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/ModernCityDowntown_t_x-17_y-69_z0.2_o_x0_y0_z0.json"
         
         #Neighborhood
-        #self.annotation_file = "rayfronts/annotations/transformed_annotations/Neighborhood_t_x0_y0_z0_o_x0_y0_z0.json"
+        self.annotation_file = "rayfronts/annotations/transformed_annotations/Neighborhood_t_x0_y0_z0_o_x0_y0_z0.json"
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/Neighborhood_t_x160_y-19_z0_o_x0_y0_z180.json"
         #self.annotation_file = "rayfronts/annotations/transformed_annotations/Neighborhood_t_x-20_y-80_z0_o_x0_y0_z90.json"
         
@@ -169,11 +169,11 @@ class MissionChecker(Node):
             marker.id = i
             marker.type = Marker.CUBE
             marker.action = Marker.ADD
-            marker.pose.position.x = -center[1]
-            marker.pose.position.y = center[0]
+            marker.pose.position.x = center[0]
+            marker.pose.position.y = center[1]
             marker.pose.position.z = center[2]
-            marker.scale.x = size[1]
-            marker.scale.y = size[0]
+            marker.scale.x = size[0]
+            marker.scale.y = size[1]
             marker.scale.z = size[2]
             marker.color = ColorRGBA(r=0.5, g=0.5, b=0.0, a=0.3)
             marker.lifetime.sec = 1
