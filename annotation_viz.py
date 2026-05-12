@@ -1,5 +1,6 @@
 import rclpy
 from rclpy.node import Node
+from geometry_msgs.msg import Point
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 import json
@@ -69,31 +70,58 @@ class AnnotationViz(Node):
         qx, qy, qz, qw = self._orient
         mid = 0
 
+        corners_template = [
+            (-1, -1, -1), (+1, -1, -1), (+1, +1, -1), (-1, +1, -1),
+            (-1, -1, +1), (+1, -1, +1), (+1, +1, +1), (-1, +1, +1),
+        ]
+        edges = [(0,1),(1,2),(2,3),(3,0), (4,5),(5,6),(6,7),(7,4), (0,4),(1,5),(2,6),(3,7)]
+
         for ann in self.annotations:
             cx, cy, cz = ann['center']
             sx, sy, sz = ann['size']
             color = self._class_color(ann['class'])
+            color.a = 1.0
 
-            cube = Marker()
-            cube.header.frame_id = 'map'
-            cube.header.stamp = now
-            cube.ns = ann['class']
-            cube.id = mid; mid += 1
-            cube.type = Marker.CUBE
-            cube.action = Marker.ADD
-            cube.pose.position.x = float(cx)
-            cube.pose.position.y = float(cy)
-            cube.pose.position.z = float(cz)
-            cube.pose.orientation.x = qx
-            cube.pose.orientation.y = qy
-            cube.pose.orientation.z = qz
-            cube.pose.orientation.w = qw
-            cube.scale.x = float(sx)
-            cube.scale.y = float(sy)
-            cube.scale.z = float(sz)
-            cube.color = color
-            cube.lifetime.sec = 2
-            msg.markers.append(cube)
+            box = Marker()
+            box.header.frame_id = 'map'
+            box.header.stamp = now
+            box.ns = ann['class']
+            box.id = mid; mid += 1
+            box.type = Marker.LINE_LIST
+            box.action = Marker.ADD
+            box.pose.position.x = float(cx)
+            box.pose.position.y = float(cy)
+            box.pose.position.z = float(cz)
+            box.pose.orientation.x = qx
+            box.pose.orientation.y = qy
+            box.pose.orientation.z = qz
+            box.pose.orientation.w = qw
+            box.scale.x = 0.05
+            box.color = color
+            hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
+            corners = [(ex*hx, ey*hy, ez*hz) for ex, ey, ez in corners_template]
+            for a, b in edges:
+                for px, py, pz in (corners[a], corners[b]):
+                    p = Point(); p.x, p.y, p.z = float(px), float(py), float(pz)
+                    box.points.append(p)
+            box.lifetime.sec = 2
+            msg.markers.append(box)
+
+            fill = Marker()
+            fill.header.frame_id = 'map'
+            fill.header.stamp = now
+            fill.ns = ann['class'] + '_fill'
+            fill.id = mid; mid += 1
+            fill.type = Marker.CUBE
+            fill.action = Marker.ADD
+            fill.pose = box.pose
+            fill.scale.x = float(sx)
+            fill.scale.y = float(sy)
+            fill.scale.z = float(sz)
+            fill.color = self._class_color(ann['class'])
+            fill.color.a = 0.15
+            fill.lifetime.sec = 2
+            msg.markers.append(fill)
 
             label = Marker()
             label.header.frame_id = 'map'
