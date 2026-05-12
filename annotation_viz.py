@@ -16,7 +16,11 @@ class AnnotationViz(Node):
         script_name = os.environ.get('ISAAC_SIM_SCRIPT_NAME', '')
         env_name = re.sub(r'_Launch\.py$', '', script_name)
 
-        spawn_x, spawn_y, spawn_z, qz, qw = self._parse_launch_script(script_name)
+        spawn_x = float(os.environ.get('DRONE_X',  '0.0'))
+        spawn_y = float(os.environ.get('DRONE_Y',  '0.0'))
+        spawn_z = float(os.environ.get('DRONE_Z',  '0.07'))
+        qz      = float(os.environ.get('DRONE_QZ', '0.0'))
+        qw      = float(os.environ.get('DRONE_QW', '1.0'))
         yaw = 2.0 * math.atan2(qz, qw)
 
         raw_path = f'rayfronts/annotations/raw_annotations/{env_name}.json'
@@ -32,40 +36,6 @@ class AnnotationViz(Node):
             f'env={env_name}, spawn=({spawn_x:.2f},{spawn_y:.2f},{spawn_z:.2f}), '
             f'yaw={math.degrees(yaw):.1f}deg, annotations={len(self.annotations)}'
         )
-
-    def _parse_launch_script(self, script_name):
-        path = f'/workspace/launch_scripts/{script_name}'
-        if not os.path.exists(path):
-            self.get_logger().error(f'Launch script not found: {path}')
-            return 0.0, 0.0, 0.0, 0.0, 1.0
-
-        with open(path, 'r') as f:
-            content = f.read()
-
-        def get_float(var, default=0.0):
-            matches = re.findall(rf'^[ \t]*{var}\s*=\s*([-\d.]+)', content, re.MULTILINE)
-            return float(matches[-1]) if matches else default
-
-        spawn_x = get_float('DRONE_X')
-        spawn_y = get_float('DRONE_Y')
-        spawn_z = get_float('DRONE_Z')
-
-        # support named quaternion vars (new) or literal init_orient=[...] (legacy)
-        qz_matches = re.findall(r'^[ \t]*DRONE_QZ\s*=\s*([-\d.]+)', content, re.MULTILINE)
-        qw_matches = re.findall(r'^[ \t]*DRONE_QW\s*=\s*([-\d.]+)', content, re.MULTILINE)
-        if qz_matches and qw_matches:
-            qz = float(qz_matches[-1])
-            qw = float(qw_matches[-1])
-        else:
-            m = re.search(r'init_orient\s*=\s*\[([^\]]+)\]', content)
-            if m:
-                vals = [float(v.strip()) for v in m.group(1).split(',')]
-                qz = vals[2] if len(vals) >= 4 else 0.0
-                qw = vals[3] if len(vals) >= 4 else 1.0
-            else:
-                qz, qw = 0.0, 1.0
-
-        return spawn_x, spawn_y, spawn_z, qz, qw
 
     def _load_and_transform(self, path, tx, ty, tz, yaw):
         if not os.path.exists(path):
