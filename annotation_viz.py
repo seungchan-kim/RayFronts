@@ -48,15 +48,22 @@ class AnnotationViz(Node):
 
         spawn_x = get_float('DRONE_X')
         spawn_y = get_float('DRONE_Y')
-        spawn_z = get_float('DRONE_HEIGHT')
+        spawn_z = get_float('DRONE_Z')
 
-        m = re.search(r'init_orient\s*=\s*\[([^\]]+)\]', content)
-        if m:
-            vals = [float(v.strip()) for v in m.group(1).split(',')]
-            qz = vals[2] if len(vals) >= 4 else 0.0
-            qw = vals[3] if len(vals) >= 4 else 1.0
+        # support named quaternion vars (new) or literal init_orient=[...] (legacy)
+        qz_matches = re.findall(r'^[ \t]*DRONE_QZ\s*=\s*([-\d.]+)', content, re.MULTILINE)
+        qw_matches = re.findall(r'^[ \t]*DRONE_QW\s*=\s*([-\d.]+)', content, re.MULTILINE)
+        if qz_matches and qw_matches:
+            qz = float(qz_matches[-1])
+            qw = float(qw_matches[-1])
         else:
-            qz, qw = 0.0, 1.0
+            m = re.search(r'init_orient\s*=\s*\[([^\]]+)\]', content)
+            if m:
+                vals = [float(v.strip()) for v in m.group(1).split(',')]
+                qz = vals[2] if len(vals) >= 4 else 0.0
+                qw = vals[3] if len(vals) >= 4 else 1.0
+            else:
+                qz, qw = 0.0, 1.0
 
         return spawn_x, spawn_y, spawn_z, qz, qw
 
