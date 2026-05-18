@@ -24,7 +24,7 @@ class AnnotationViz(Node):
         qw      = float(os.environ.get('DRONE_QW', '1.0'))
         yaw = 2.0 * math.atan2(qz, qw)
 
-        raw_path = f'rayfronts/annotations/raw_annotations/{env_name}.json'
+        raw_path = f'rayfronts/annotations/{env_name}.json'
         self.annotations = self._load_and_transform(raw_path, spawn_x, spawn_y, spawn_z, yaw)
 
         half = -yaw / 2.0
