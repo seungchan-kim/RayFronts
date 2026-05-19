@@ -1,13 +1,15 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Point
-from std_msgs.msg import ColorRGBA
+from nav_msgs.msg import Odometry
+from std_msgs.msg import ColorRGBA, String
 from visualization_msgs.msg import Marker, MarkerArray
 import json
 import os
 import re
 import math
 import colorsys
+import numpy as np
 
 
 class AnnotationViz(Node):
@@ -32,6 +34,16 @@ class AnnotationViz(Node):
 
         self.pub = self.create_publisher(MarkerArray, '/annotation_bboxes_all', 10)
         self.create_timer(1.0, self._publish)
+
+        self._last_pos = None
+        self._total_distance = 0.0
+        self.traj_length_pub = self.create_publisher(String, 'trajectory_length', 10)
+        self.create_subscription(
+            Odometry,
+            '/robot_1/odometry_conversion/odometry',
+            self._odom_callback,
+            10,
+        )
 
         self.get_logger().info(
             f'env={env_name}, spawn=({spawn_x:.2f},{spawn_y:.2f},{spawn_z:.2f}), '
@@ -58,6 +70,16 @@ class AnnotationViz(Node):
             cy_ = -cx * sin_y + cy * cos_y
             out.append({'class': item['class'], 'center': [cx_, cy_, cz], 'size': [sx, sy, sz]})
         return out
+
+    def _odom_callback(self, msg):
+        p = msg.pose.pose.position
+        pos = np.array([p.x, p.y, p.z])
+        if self._last_pos is not None:
+            self._total_distance += float(np.linalg.norm(pos - self._last_pos))
+        self._last_pos = pos
+        out = String()
+        out.data = str(round(self._total_distance, 2))
+        self.traj_length_pub.publish(out)
 
     def _class_color(self, name):
         hue = (hash(name) & 0xFFFF) / 0xFFFF
