@@ -22,15 +22,10 @@ class AnnotationViz(Node):
         spawn_x = float(os.environ.get('DRONE_X',  '0.0'))
         spawn_y = float(os.environ.get('DRONE_Y',  '0.0'))
         spawn_z = float(os.environ.get('DRONE_Z',  '0.07'))
-        qz      = float(os.environ.get('DRONE_QZ', '0.0'))
-        qw      = float(os.environ.get('DRONE_QW', '1.0'))
-        yaw = 2.0 * math.atan2(qz, qw)
 
         raw_path = f'rayfronts/annotations/{env_name}.json'
-        self.annotations = self._load_and_transform(raw_path, spawn_x, spawn_y, spawn_z, yaw)
+        self.annotations = self._load_and_transform(raw_path, spawn_x, spawn_y, spawn_z)
 
-        half = -yaw / 2.0
-        self._orient = (0.0, 0.0, math.sin(half), math.cos(half))
 
         self.pub = self.create_publisher(MarkerArray, '/annotation_bboxes_all', 10)
         self.create_timer(1.0, self._publish)
@@ -47,10 +42,10 @@ class AnnotationViz(Node):
 
         self.get_logger().info(
             f'env={env_name}, spawn=({spawn_x:.2f},{spawn_y:.2f},{spawn_z:.2f}), '
-            f'yaw={math.degrees(yaw):.1f}deg, annotations={len(self.annotations)}'
+            f'annotations={len(self.annotations)}'
         )
 
-    def _load_and_transform(self, path, tx, ty, tz, yaw):
+    def _load_and_transform(self, path, tx, ty, tz):
         if not os.path.exists(path):
             self.get_logger().error(f'Annotation file not found: {path}')
             return []
@@ -58,17 +53,13 @@ class AnnotationViz(Node):
         with open(path, 'r') as f:
             data = json.load(f)
 
-        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
         out = []
         for item in data:
             cx, cy, cz = item['bbox_world']['center_xyz_m']
             sx, sy, sz = item['bbox_world']['size_xyz_m']
-            cx -= tx
-            cy -= ty
-            cz -= tz
-            cx_ =  cx * cos_y + cy * sin_y
-            cy_ = -cx * sin_y + cy * cos_y
-            out.append({'class': item['class'], 'center': [cx_, cy_, cz], 'size': [sx, sy, sz]})
+            orient = item['bbox_world'].get('orientation_deg', [0.0, 0.0, 0.0])
+            box_yaw = math.radians(orient[2])
+            out.append({'class': item['class'], 'center': [cx - tx, cy - ty, cz - tz], 'size': [sx, sy, sz], 'box_yaw': box_yaw})
         return out
 
     def _odom_callback(self, msg):
@@ -89,7 +80,6 @@ class AnnotationViz(Node):
     def _publish(self):
         msg = MarkerArray()
         now = self.get_clock().now().to_msg()
-        qx, qy, qz, qw = self._orient
         mid = 0
 
         corners_template = [
@@ -114,10 +104,10 @@ class AnnotationViz(Node):
             box.pose.position.x = float(cx)
             box.pose.position.y = float(cy)
             box.pose.position.z = float(cz)
-            box.pose.orientation.x = qx
-            box.pose.orientation.y = qy
-            box.pose.orientation.z = qz
-            box.pose.orientation.w = qw
+            box.pose.orientation.x = 0.0
+            box.pose.orientation.y = 0.0
+            box.pose.orientation.z = math.sin(ann['box_yaw'] / 2.0)
+            box.pose.orientation.w = math.cos(ann['box_yaw'] / 2.0)
             box.scale.x = 0.05
             box.color = color
             hx, hy, hz = sx / 2.0, sy / 2.0, sz / 2.0
