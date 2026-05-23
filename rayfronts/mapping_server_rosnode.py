@@ -293,11 +293,15 @@ class MappingServer(Node):
     if not indices_to_delete:
       return
     
+    deleted_labels = [obj for i, obj in enumerate(self._queries_labels['text']) if i in indices_to_delete]
     self._queries_labels['text'] = [obj for i, obj in enumerate(self._queries_labels['text']) if i not in indices_to_delete]
 
     mask = torch.ones(len(self._queries_feats['text']), dtype=torch.bool)
     mask[indices_to_delete] = False
     self._queries_feats['text'] = self._queries_feats['text'][mask]
+
+    with self._query_lock:
+      self._queries_labels_history.difference_update(deleted_labels)
 
   def run_queries(self):
     with self._query_lock:
